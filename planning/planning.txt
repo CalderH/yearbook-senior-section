@@ -1,0 +1,104 @@
+okay
+
+time to plan this for the long term
+
+the program needs to be independent of the year. should be something that you can apply one year after the other, just to files in different folders.
+keep the code in one folder. the different years go in their own folders
+
+should be able to setup/customize it — where is each type of file stored, what is everything called
+but also not have to worry about everything. if you don’t enter any setting, there is a default.
+
+There should be a command that sets up the file system/database/etc in a given directory (?)
+
+
+
+It should also be usable by other things in the yearbook — not just for the senior section (although most useful for that)
+mainly I’m thinking about the athletics section. Get names straight
+
+
+
+
+
+- When possible, collect information from students directly
+- When collecting our own data, format the questions in a way that reduces the likelihood of erroneous answers
+- When using others’ data, choose sources that are most likely to be trustworthy
+- Check multiple sources against each other
+
+
+
+
+
+hmm
+
+I see 2 possible ways to store changes/versions… I’m kind of liking the more complicated one
+
+Solution 1 (what I used last year):
+Store many complete versions of the whole database. You can always just open any of the older files to see how it was in an older version. Create a new version for every significant change.
+
+Solution 2:
+Have one file that contains the complete history of the database: the initial data, and then all changes in order of execution along with times and commit messages. Then have a program that compiles that into a file representing the current state of the data, or the data at any other time. If you are at the working version and make a change, you can commit it and then the change goes to the file.
+
+
+Advantages:
+the working data file is always the same, has the same name
+uses less space
+easier to store small changes and get the status at any point
+
+Disadvantages:
+basically turns into small-scale Git
+
+how could this be done in a way that is user-friendly?
+in a way it’s actually more user-friendly. You don’t have to keep manually creating copies. You just edit the file and occasionally enter a commit message. That’s it.
+
+
+
+
+
+
+how does the object-based API work?
+
+there should be a database object, which you get other things from
+
+a database is essentially a set of *record versions*. Can take a vertical slice through these to get the set of record versions at any given time: a snapshot of the DB at that time/commit. Or can take a horizontal slice to get the version history of an individual record.
+
+but the key object is a record version
+I think I’ll just call that a record, and the full history of a record is called record_history or something
+
+DB can give you a vertical version, from which you can get a record
+or, DB can give you a history of one student, from which you can get a record
+
+a record can give you:
+the history of that record
+the version at the point of that record
+the version at the next major commit after that record
+
+the main thing you want to access from the DB is the current snapshot / working version
+
+can use a getter to get a student, like working_version[‘id’]
+(but I will probably want to add some extra functionality to that getter that is called implicitly)
+
+
+how to get a field from a record?
+
+I wonder if there is a way to use a function to handle record.field dot syntax
+since it needs to replace the underscores in the field name with spaces, and potentially add a period to the end if there are edits
+also if I decide to change a field name in the database files, I don’t want to edit that everywhere in the program, so perhaps this function can also be used to replace old names with new names
+and if you access a nonexistent field, it will return None
+
+not sure how to deal with fields that have subfields, like names and user data entry
+
+
+as before, need to keep track of which fields should not be counted in the version control (like notes)
+
+ah I know how to do that
+create a JSON file that serves as a template for student records
+both for user reference and for the program
+the names of the fields can have annotations (* or something) to indicate that they don’t need to be tracked
+and if you try to set or access a field that is not there, it will raise an error
+this allows for using setattr without accidentally introducing new fields if there is a typo
+
+
+
+
+how to use this between years?
+I think just have a settings file that has a path to the folder where it is currently used. The settings.json file for that year must be in the top level of that folder (I think that is a fair requirement)
