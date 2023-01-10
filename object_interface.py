@@ -35,7 +35,6 @@ def _create_marker_dict_functions(marker_char):
     
     return has_marker, add_marker, remove_marker, in_dict, dict_get
 
-
 _has_edit_marker, _add_edit_marker, _remove_edit_marker, _in_dict_edit, _dict_get_edit = _create_marker_dict_functions(_edit_marker_char)
 _has_untracked_marker, _add_untracked_marker, _remove_untracked_marker, _in_dict_untracked, _dict_get_untracked = _create_marker_dict_functions(_untracked_marker_char)
 

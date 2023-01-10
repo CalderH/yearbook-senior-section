@@ -14,8 +14,5 @@ def path_to(key, *args):
     if len(args) > 0:
         if path[-1] != '/':
             path += '/'
-            path += '/'.join(args)
+        path += '/'.join(args)
     return path
-
-def template_path():
-    return path_to('template')
