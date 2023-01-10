@@ -114,7 +114,20 @@ since that is relevant for concentrations. Need to preserve the template
 I think there has to be an object for a list of JSONInterfaces
 
 how to keep track of changes to list elements? add a . to the name of the key that leads to the list
-what if you have a list of lists? like in the alphabetization 
+what if you have a list of lists? like in the alphabetization
+I guess just change the first one you hit when you go up
 
 also how to keep track of deletions? does there need to be a way to mark that a field was deleted?
 I think you can just set the value to null. That’s not something that you would do on purpose
+When you commit it, the program handles it and actually deletes the field
+
+now alphabetization doesn’t actually have anything in in that needs to be templated
+can just be a list, returned
+so in the template, 
+…
+
+does it make sense for the template to be on a yearly basis?
+since the code relies on the template…
+I guess template will in fact go in here
+yes this does mean that if the template changes it’s harder to edit last year’s. but why would you ever want to?
+oh never mind. just have a git branch for each year. (figure out how to do this and save instructions)
