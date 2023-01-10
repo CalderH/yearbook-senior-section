@@ -1,0 +1,41 @@
+{
+    "name": {
+        "name": "",
+        "parts": {},
+        "alphabetization": [],
+        "lines": []
+    },
+    "year": "",
+    "concentrations": [
+        {
+            "name": "",
+            "degree": "",
+            "honors": true
+        }
+    ],
+    "programs": [],
+    "organizations": [],
+    "quote": "",
+    "contact": [],
+    "portrait": {
+        "path": "",
+        "crop": {
+            "aspect ratio": 0,
+            "scale": 0,
+            "dx": 0,
+            "dy": 0
+        }
+    },    
+    "formatting": {},
+    "email": {
+        "brown": [],
+        "personal": []
+    },
+    "email lists": [],
+    "source": {
+        "self": {},
+        "legacy": {},
+        "registrar": {}
+    },
+    "notes*": []
+}

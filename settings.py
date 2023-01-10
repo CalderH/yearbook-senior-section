@@ -1,6 +1,6 @@
 import json
 
-__all__ = ['system_settings', 'year_settings']
+# __all__ = ['system_settings', 'year_settings']
 
 with open('settings.json') as system_settings_file:
     system_settings = json.load(system_settings_file)

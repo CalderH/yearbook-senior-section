@@ -102,3 +102,19 @@ this allows for using setattr without accidentally introducing new fields if the
 
 how to use this between years?
 I think just have a settings file that has a path to the folder where it is currently used. The settings.json file for that year must be in the top level of that folder (I think that is a fair requirement)
+
+
+
+how is this object interface thing going to work
+I don’t want to have to declare a new class for each type of data
+Each object has a *template* for what kind of data it represents.
+
+how do lists work?
+since that is relevant for concentrations. Need to preserve the template
+I think there has to be an object for a list of JSONInterfaces
+
+how to keep track of changes to list elements? add a . to the name of the key that leads to the list
+what if you have a list of lists? like in the alphabetization 
+
+also how to keep track of deletions? does there need to be a way to mark that a field was deleted?
+I think you can just set the value to null. That’s not something that you would do on purpose
