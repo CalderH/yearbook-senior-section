@@ -1,0 +1,9 @@
+from json_interface import *
+
+
+with open('template.json') as file:
+    template = json.load(file)
+
+
+def record(data):
+    return JSONDict('person', template, data)

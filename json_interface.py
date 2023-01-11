@@ -46,7 +46,7 @@ def _check_types(name, value, template):
         value_type_name = type_names[type(value)]
         template_type_name = type_names[type(template)]
         if value_type_name != template_type_name:
-            raise TypeError(f'{name} must be a {template_type_name}; cannot be {value}')
+            raise TypeError(f'{name} must be a {template_type_name}; it cannot be {repr(value)}')
 
 
 class JSONDict:
@@ -55,9 +55,22 @@ class JSONDict:
         self.__dict__['_template'] = template
         self.__dict__['_data'] = data
 
+        self._type_check()
+
+    def _type_check(self):
+        if self._template is None:
+            return
+        for name, data_value in self._data.items():
+            name = _remove_edit_marker(name)
+            self._check_name(name)
+            template_value = _dict_get_untracked(self._template, name)
+            _check_types(f'{self._type_name}.{name}', data_value, template_value)
+            if isinstance(template_value, list) or isinstance(template_value, dict):
+                self.__getattr__(name)._type_check()
+
     def _check_name(self, name):
         if self._template is not None and not _in_dict_untracked(self._template, name):
-            raise AttributeError(f"{self._type_name} does not have the attribute \"{name}\"")
+            raise AttributeError(f'{self._type_name} has no attribute \'{name}\'')
     
     def __getattr__(self, name):
         name = name.replace('_', ' ')
@@ -69,10 +82,11 @@ class JSONDict:
                 template_value = None
             else:
                 template_value = _dict_get_untracked(self._template, name)
-            _check_types(f'{self._type_name}.{name}', data_value, template_value)
-            if isinstance(template_value, dict) or (self._template is None and isinstance(data_value, dict)):
+            if isinstance(template_value, dict) or (template_value is None and isinstance(data_value, dict)):
+                if template_value == {}:
+                    template_value = None
                 return JSONDict(f'{self._type_name}.{name}', template_value, data_value)
-            elif isinstance(template_value, list) or (self._template is None and isinstance(data_value, list)):
+            elif isinstance(template_value, list) or (template_value is None and isinstance(data_value, list)):
                 if template_value is None or template_value == []:
                     item_template = None
                 else:
@@ -85,23 +99,32 @@ class JSONDict:
     
     def __setattr__(self, name, value):
         name = name.replace('_', ' ')
-        self._check_name(name)
+        
         if self._template is not None:
-            _check_types(f'{self._type_name}.{name}', value, _dict_get_untracked(self._template, name))
+            self._check_name(name)
+            type_name = f'{self._type_name}.{name}'
+            _check_types(type_name, value, _dict_get_untracked(self._template, name))
+            template_value = _dict_get_untracked(self._template, name)
+            if isinstance(template_value, dict) and template_value != {}:
+                JSONDict(type_name, template_value, value)
+            if isinstance(template_value, list) and template_value != []:
+                JSONList(type_name, template_value[0], value, self, name)
 
         name_with_marker = _add_edit_marker(name)
         name_without_marker = _remove_edit_marker(name)
         if name_with_marker in self._data:
             assert name_without_marker not in self._data
-            if self._data[name_with_marker] == value:
+            old_value = self._data[name_with_marker]
+            if old_value == value and type(old_value) == type(value):
                 return
             del self._data[name_with_marker]
         elif name_without_marker in self._data:
-            if self._data[name_without_marker] == value:
+            old_value = self._data[name_without_marker]
+            if old_value == value and type(old_value) == type(value):
                 return
             del self._data[name_without_marker]
         
-        if _remove_untracked_marker(name) in self._template:
+        if self._template is None or _remove_untracked_marker(name) in self._template:
             self._data[_add_edit_marker(name)] = value
         else:
             assert _add_untracked_marker(name) in self._template
@@ -130,13 +153,26 @@ class JSONList:
         self._data = data
         self._edit_marker_obj = edit_marker_obj
         self._edit_marker_key = edit_marker_key
+
+        self._type_check()
+    
+    def _type_check(self):
+        if self._item_template is None:
+            return
+        for index in range(len(self._data)):
+            item = self._data[index]
+            _check_types(f'(item of {self._type_name})', item, self._item_template)
+            if isinstance(self._item_template, list) or isinstance(self._item_template, dict):
+                self.__getitem__(index)._type_check()
     
     def __getitem__(self, index):
         item = self._data[index]
         name = f'(item of {self._type_name})'
-        _check_types(name, item, self._item_template)
         if isinstance(self._item_template, dict) or (self._item_template is None and isinstance(item, dict)):
-            return JSONDict(name, self._item_template, item)
+            dict_template = self._item_template
+            if dict_template == {}:
+                dict_template = None
+            return JSONDict(name, dict_template, item)
         elif isinstance(self._item_template, list) or (self._item_template is None and isinstance(item, list)):
             if self._item_template is None or self._item_template == []:
                 item_template = None
@@ -154,11 +190,19 @@ class JSONList:
         self._edit_marker_obj._data[key_with_marker] = self._edit_marker_obj._data[self._edit_marker_key]
         del self._edit_marker_obj._data[self._edit_marker_key]
     
+    def _recursive_check_types(self, value):
+        type_name = f'(item of {self._type_name})'
+        _check_types(type_name, value, self._item_template)
+        if isinstance(self._item_template, dict) and self._item_template != {}:
+            JSONDict(type_name, self._item_template, value)
+        if isinstance(self._item_template, list) and self._item_template != []:
+            JSONList(type_name, self._item_template[0], value, self._edit_marker_obj, self._edit_marker_key)
+    
     def __setitem__(self, index, value):
         current_value = self._data[index]
-        if current_value == value:
+        if current_value == value and type(current_value) == type(value):
             return
-        _check_types(f'(item of {self._type_name})', value, self._item_template)
+        self._recursive_check_types(value)
         self._data[index] = value
         self._handle_edit_marker()
     
@@ -167,17 +211,10 @@ class JSONList:
         self._handle_edit_marker()
     
     def append(self, value):
-        _check_types(f'(item of {self._type_name})', value, self._item_template)
+        self._recursive_check_types(value)
         self._data.append(value)
         self._handle_edit_marker()
     
     def __str__(self):
         return str(self._data)
 
-
-with open('template.json') as file:
-    template = json.load(file)
-
-
-def record(data):
-    return JSONDict('person', template, data)

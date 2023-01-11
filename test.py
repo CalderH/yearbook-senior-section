@@ -1,11 +1,9 @@
 from settings import *
-from object_interface import *
+from json_interface import *
 
-template = {'list': []}
-data = {'list': [0]}
+template = {'a': [[[{'b': [1]}]]]}
+data = {'a': []}
 
 o = JSONDict('person', template, data)
-
-print(o.list)
-o.list.append(True)
-print(o.list)
+o.a.append([[{'b': [1]}]])
+print(o)

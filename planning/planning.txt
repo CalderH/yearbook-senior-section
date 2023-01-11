@@ -131,3 +131,34 @@ since the code relies on the template…
 I guess template will in fact go in here
 yes this does mean that if the template changes it’s harder to edit last year’s. but why would you ever want to?
 oh never mind. just have a git branch for each year. (figure out how to do this and save instructions)
+
+
+
+okay
+so
+how to deal with the database?
+need to have a database object, from which we can get records, histories, etc.
+major & minor commits?
+
+what if you want to make a branch?
+I found that somewhat useful…
+do I want to incorporate that ability to the version control system?
+basically branching means
+you undo your changes to a certain point, and then make other changes from there
+
+
+there is the chance that you can sneak around the type system by using the fact that 1 == True etc
+but I don’t expect that will be a problem
+
+
+TODO
+type check to deeper level when you are adding in things
+
+if self._template is not None:
+    self._check_name(name)
+    _check_types(f'{self._type_name}.{name}', value, _dict_get_untracked(self._template, name))
+    template_value = _dict_get_untracked(self._template, name)
+    if isinstance(template_value, dict) and template_value != {}:
+        JSONDict(f'{self._type_name}.{name}', template_value, value)
+    if isinstance(template_value, list) and template_value != []:
+        JSONList(f'{self._type_name}.{name}', template_value[0], value, self, name)
