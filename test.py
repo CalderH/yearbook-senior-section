@@ -1,9 +1,8 @@
 from settings import *
 from json_interface import *
 
-student_template = {'a': 1}
-data = {'a': None}
+student_template = {'': 1}
+data = {'a': 'hi'}
 
-o = JSONDict('person', student_template, data, mark_edits=False)
-o.a = 2
+o = JSONDict('person', student_template, data)
 print(o)

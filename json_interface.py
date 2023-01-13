@@ -50,10 +50,17 @@ class JSONDict:
     def __init__(self, type_name, template, data, mark_edits=True):
         self.__dict__['_type_name'] = type_name
         self.__dict__['_template'] = template
+        self.__dict__['_any_keys'] = template is not None and template.keys() == {''}
         self.__dict__['_data'] = data
         self.__dict__['_mark_edits'] = mark_edits
 
         self._type_check()
+    
+    def _element_type_name(self, name):
+        if self._any_keys:
+            return f'(element of {self._type_name})'
+        else:
+            return f'{self._type_name}.{name}'
 
     def _type_check(self):
         if self._template is None:
@@ -61,13 +68,16 @@ class JSONDict:
         for name, data_value in self._data.items():
             name = _remove_edit_marker(name)
             self._check_name(name)
-            template_value = _dict_get_untracked(self._template, name)
-            _shallow_type_check(f'{self._type_name}.{name}', data_value, template_value)
+            if self._any_keys:
+                template_value = _dict_get_untracked(self._template, '')
+            else:
+                template_value = _dict_get_untracked(self._template, name)
+            _shallow_type_check(self._element_type_name(name), data_value, template_value)
             if isinstance(template_value, list) or isinstance(template_value, dict):
                 self.__getattr__(name)
 
     def _check_name(self, name):
-        if self._template is not None and not _in_dict_untracked(self._template, name):
+        if self._template is not None and not self._any_keys and not _in_dict_untracked(self._template, name):
             raise AttributeError(f'{self._type_name} has no attribute \'{name}\'')
     
     def __getattr__(self, name):
@@ -80,18 +90,20 @@ class JSONDict:
                 return None
             if self._template is None:
                 template_value = None
+            elif self._any_keys:
+                template_value = _dict_get_untracked(self._template, '')
             else:
                 template_value = _dict_get_untracked(self._template, name)
             if isinstance(template_value, dict) or (template_value is None and isinstance(data_value, dict)):
                 if template_value == {}:
                     template_value = None
-                return JSONDict(f'{self._type_name}.{name}', template_value, data_value, mark_edits=self._mark_edits)
+                return JSONDict(self._element_type_name(name), template_value, data_value, mark_edits=self._mark_edits)
             elif isinstance(template_value, list) or (template_value is None and isinstance(data_value, list)):
                 if template_value is None or template_value == []:
                     item_template = None
                 else:
                     item_template = template_value[0]
-                return JSONList(f'{self._type_name}.{name}', item_template, data_value, self, name, mark_edits=self._mark_edits)
+                return JSONList(self._element_type_name(name), item_template, data_value, self, name, mark_edits=self._mark_edits)
             else:
                 return data_value
         else:
@@ -102,9 +114,12 @@ class JSONDict:
         
         if self._template is not None:
             self._check_name(name)
-            type_name = f'{self._type_name}.{name}'
-            _shallow_type_check(type_name, value, _dict_get_untracked(self._template, name))
-            template_value = _dict_get_untracked(self._template, name)
+            type_name = self._element_type_name(name)
+            if self._any_keys:
+                template_value = _dict_get_untracked(self._template, '')
+            else:
+                template_value = _dict_get_untracked(self._template, name)
+            _shallow_type_check(type_name, value, template_value)
             if isinstance(template_value, dict) and template_value != {}:
                 JSONDict(type_name, template_value, value)
             if isinstance(template_value, list) and template_value != []:
