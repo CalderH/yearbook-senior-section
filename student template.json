@@ -3,7 +3,7 @@
         "name": "",
         "parts": {},
         "alphabetization": [],
-        "lines": []
+        "lines": [""]
     },
     "year": "",
     "concentrations": [
@@ -13,10 +13,10 @@
             "honors": true
         }
     ],
-    "programs": [],
-    "organizations": [],
+    "programs": [""],
+    "organizations": [""],
     "quote": "",
-    "contact": [],
+    "contact": [""],
     "portrait": {
         "path": "",
         "crop": {
@@ -28,14 +28,14 @@
     },    
     "formatting": {},
     "email": {
-        "brown": [],
-        "personal": []
+        "brown": [""],
+        "personal": [""]
     },
-    "email lists": [],
+    "email lists": [""],
     "source": {
         "self": {},
         "legacy": {},
         "registrar": {}
     },
-    "notes*": []
+    "notes*": [""]
 }

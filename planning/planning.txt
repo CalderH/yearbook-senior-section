@@ -147,18 +147,94 @@ basically branching means
 you undo your changes to a certain point, and then make other changes from there
 
 
-there is the chance that you can sneak around the type system by using the fact that 1 == True etc
+there may be the chance that you can sneak around the type system by using the fact that 1 == True etc
 but I don’t expect that will be a problem
 
 
-TODO
-type check to deeper level when you are adding in things
 
-if self._template is not None:
-    self._check_name(name)
-    _check_types(f'{self._type_name}.{name}', value, _dict_get_untracked(self._template, name))
-    template_value = _dict_get_untracked(self._template, name)
-    if isinstance(template_value, dict) and template_value != {}:
-        JSONDict(f'{self._type_name}.{name}', template_value, value)
-    if isinstance(template_value, list) and template_value != []:
-        JSONList(f'{self._type_name}.{name}', template_value[0], value, self, name)
+okay now time to actually figure out how the database works
+there should be one file (database.json or something) that stores the working version
+(this is what will be put on the page)
+the commit command automatically pulls from that file
+
+there needs to be a way to compare two files side by side, I think?
+
+oh it would be nice to have the system be able to focus on just one or a few records
+so you don’t have to search, if you don’t want to.
+then the history file would have to include stashed changes, so you can change what is in the working version
+
+I think every file other than the history is just like a view into the database.
+all necessary information is stored entirely in the database history file
+when you save a view into it, it automatically updates the database
+use os.stat(path).ST_MTIME
+or os.path.getmtime(path)
+
+what is the point of committing, if not to transfer from the working file to the history file?
+It saves the state of the DB at that version
+And it checks for accidental edits
+
+ok
+I think the structure is:
+have a tree (maybe DAG, will figure that out later) with branches
+right when you commit to a branch, the last version in the branch will be a committed version
+but as soon as you start to edit from there, then it creates a new version that is not committed
+
+how does the DB file relate to other files?
+as I said before each file outside of it is simply a view into it, an interface to edit it
+for each file, need to maintain information about what exactly it represents; what it’s a view into
+so that when it’s saved, the program knows how to edit the DB
+
+ooh
+can this notion of “views” even extend to only seeing particular fields of particular records?
+that might be very useful for e.g. editing organizations
+can figure that out later
+
+does there need to be any “core” file that you’re editing? like the most up to date, main version?
+which suggests the question: is there a main branch / current branch? or are there just branches and you decide which to use
+if the latter
+you can just have one file called something like database.json, which anything external (i.e. the layout code) uses
+and at any point you can just delete database.json and create a new different view synced to a file with the same name
+(or there could even be a built-in way of doing that)
+for the most part that makes more sense
+however, the only thing I don’t like is that then there is nothing in the DB file itself indicating what is the most up-to-date, correct version — that is only stored through a combination of view parameters and file naming
+okay yeah I think I will make you define some branch as the main branch. (you can switch this at any time)
+and there is one file that is always just a view of the end of the main branch. you can’t change what it’s looking at, aside from changing what the main branch is. and you can’t delete it. (or if you do, it will be regenerated immediately)
+
+if you want to view anything else (e.g. an old version), you have to create a view
+
+if you want to delete a view, can you just delete the file? or do you have to do it with a command?
+I think you can just delete the file. The system will detect it.
+what if you change the name of a view?
+perhaps each view has an id, stored within the view file and referenced by the DB file
+although then the system has to read every json file in the folder
+(I guess that’s not such a big problem…)
+
+
+how should the file be organized?
+want it to be as human-readable as possible
+Organize by commits. Each commit contains a dictionary with just those records that were updated
+actually, to save space, maybe only include the particular *fields* that were updated?
+(and then I guess deleting a field would be replacing it with None)
+I see no reason not to. It saves space, and I think also time since it doesn’t require writing as much data
+
+If you want to undo a change and have it affect all commits after that, then you can delete that record from the history
+okay then that is a case where you want to edit the file
+
+actually
+okay
+if you have gone to a previous commit and edit it, it will give you two options:
+1. create a new branch with your edits and leave the old commit unchanged
+2. edit the old commit, and create a new branch with the old version of that commit so it’s saved somewhere
+(then you can switch it back if you would like)
+then you don’t have to edit the DB history file itself
+
+Each commit has an ID, and potentially a name.
+The commit ID should be meaningful
+if only one branch, then it can just be 1, 2, 3, 4…
+if there are more branches, then there are more numbers that indicate which branch to take at each spot.
+like 0.0.2.1#37
+meaning: the 37th commit on branch 1 of branch 2 of branch 0 of branch 0
+0.0#10 can be followed either by 0.0#11 or by 0.0.0#0, 0.0.1#0, etc.
+
+the whole structure though is a dictionary
+so you can easily get to a commit just by getting its id
