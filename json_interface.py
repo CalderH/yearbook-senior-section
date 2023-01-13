@@ -47,10 +47,11 @@ def _shallow_type_check(name, value, template):
 
 
 class JSONDict:
-    def __init__(self, type_name, template, data):
+    def __init__(self, type_name, template, data, mark_edits=True):
         self.__dict__['_type_name'] = type_name
         self.__dict__['_template'] = template
         self.__dict__['_data'] = data
+        self.__dict__['_mark_edits'] = mark_edits
 
         self._type_check()
 
@@ -84,13 +85,13 @@ class JSONDict:
             if isinstance(template_value, dict) or (template_value is None and isinstance(data_value, dict)):
                 if template_value == {}:
                     template_value = None
-                return JSONDict(f'{self._type_name}.{name}', template_value, data_value)
+                return JSONDict(f'{self._type_name}.{name}', template_value, data_value, mark_edits=self._mark_edits)
             elif isinstance(template_value, list) or (template_value is None and isinstance(data_value, list)):
                 if template_value is None or template_value == []:
                     item_template = None
                 else:
                     item_template = template_value[0]
-                return JSONList(f'{self._type_name}.{name}', item_template, data_value, self, name)
+                return JSONList(f'{self._type_name}.{name}', item_template, data_value, self, name, mark_edits=self._mark_edits)
             else:
                 return data_value
         else:
@@ -108,50 +109,57 @@ class JSONDict:
                 JSONDict(type_name, template_value, value)
             if isinstance(template_value, list) and template_value != []:
                 JSONList(type_name, template_value[0], value, self, name)
-
-        name_with_marker = _add_edit_marker(name)
-        name_without_marker = _remove_edit_marker(name)
-        if name_with_marker in self._data:
-            assert name_without_marker not in self._data
-            old_value = self._data[name_with_marker]
-            if old_value == value and type(old_value) == type(value):
-                return
-            del self._data[name_with_marker]
-        elif name_without_marker in self._data:
-            old_value = self._data[name_without_marker]
-            if old_value == value and type(old_value) == type(value):
-                return
-            del self._data[name_without_marker]
         
-        if self._template is None or _remove_untracked_marker(name) in self._template:
-            self._data[_add_edit_marker(name)] = value
+        if self._mark_edits:
+            name_with_marker = _add_edit_marker(name)
+            name_without_marker = _remove_edit_marker(name)
+            if name_with_marker in self._data:
+                assert name_without_marker not in self._data
+                old_value = self._data[name_with_marker]
+                if old_value == value and type(old_value) == type(value):
+                    return
+                del self._data[name_with_marker]
+            elif name_without_marker in self._data:
+                old_value = self._data[name_without_marker]
+                if old_value == value and type(old_value) == type(value):
+                    return
+                del self._data[name_without_marker]
+            
+            if self._template is None or _remove_untracked_marker(name) in self._template:
+                self._data[_add_edit_marker(name)] = value
+            else:
+                assert _add_untracked_marker(name) in self._template
+                self._data[name] = value
         else:
-            assert _add_untracked_marker(name) in self._template
             self._data[name] = value
     
     def __delattr__(self, name):
         name = name.replace('_', ' ')
         self._check_name(name)
         
-        name_with_marker = _add_edit_marker(name)
-        name_without_marker = _remove_edit_marker(name)
-        if name_with_marker in self._data:
-            assert name_without_marker not in self._data
-            self._data[name_with_marker] = None
-        elif name_without_marker in self._data:
-            self._data[name_without_marker] = None
+        if self._mark_edits:
+            name_with_marker = _add_edit_marker(name)
+            name_without_marker = _remove_edit_marker(name)
+            if name_with_marker in self._data:
+                assert name_without_marker not in self._data
+                self._data[name_with_marker] = None
+            elif name_without_marker in self._data:
+                self._data[name_without_marker] = None
+        else:
+            del self._data[name]
 
     def __str__(self):
         return f'{self._type_name}: {self._data}'
 
 
 class JSONList:
-    def __init__(self, type_name, item_template, data, edit_marker_obj, edit_marker_key):
+    def __init__(self, type_name, item_template, data, edit_marker_obj, edit_marker_key, mark_edits=True):
         self._type_name = type_name
         self._item_template = item_template
         self._data = data
         self._edit_marker_obj = edit_marker_obj
         self._edit_marker_key = edit_marker_key
+        self._mark_edits = mark_edits
 
         self._type_check()
     
@@ -171,17 +179,20 @@ class JSONList:
             dict_template = self._item_template
             if dict_template == {}:
                 dict_template = None
-            return JSONDict(name, dict_template, item)
+            return JSONDict(name, dict_template, item, mark_edits=self._mark_edits)
         elif isinstance(self._item_template, list) or (self._item_template is None and isinstance(item, list)):
             if self._item_template is None or self._item_template == []:
                 item_template = None
             else:
                 item_template = self._item_template[0]
-            return JSONList(name, item_template, item, self._edit_marker_obj, self._edit_marker_key)
+            return JSONList(name, item_template, item, self._edit_marker_obj, self._edit_marker_key, mark_edits=self._mark_edits)
         else:
             return item
 
     def _handle_edit_marker(self):
+        if not self._mark_edits:
+            return
+        
         key_with_marker = _add_edit_marker(self._edit_marker_key)
         if key_with_marker in self._edit_marker_obj._data:
             return
