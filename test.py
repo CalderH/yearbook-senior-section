@@ -8,18 +8,9 @@ data = {'a': None}
 # o.a = [True]
 # print(o.a)
 
-class Something(str):
-    def __init__(self, string, char):
-        super().__init__(string)
-        # self.char = char
 
-    def __hash__(self) -> int:
-        if self[-1] == self.char:
-            return hash(self[:-1])
-        else:
-            return super().__hash__()
 
-x = Something('blah', '.')
-y = Something('blah.', '.')
-print(hash(x))
-print(hash(y))
+
+x = EditDict({'a': 0, 'b': {'c': 1}})
+x['b']['c'] = 2
+print(x.write())

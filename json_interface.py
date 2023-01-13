@@ -1,39 +1,88 @@
-_edit_marker_char = '.'
-_untracked_marker_char = '*'
+# _edit_marker_char = '.'
+# _untracked_marker_char = '*'
 
-def _create_marker_dict_functions(marker_char):
-    def has_marker(name):
-        return len(name) > 0 and name[-1] == marker_char
+# def _create_marker_dict_functions(marker_char):
+#     def has_marker(name):
+#         return len(name) > 0 and name[-1] == marker_char
 
-    def remove_marker(name):
-        if has_marker(name):
-            return name[:-1]
-        else:
-            return name
+#     def remove_marker(name):
+#         if has_marker(name):
+#             return name[:-1]
+#         else:
+#             return name
 
-    def add_marker(name):
-        if has_marker(name):
-            return name
-        else:
-            return name + marker_char
+#     def add_marker(name):
+#         if has_marker(name):
+#             return name
+#         else:
+#             return name + marker_char
 
-    def in_dict(marker_dict, name):
-        return remove_marker(name) in marker_dict or add_marker(name) in marker_dict
+#     def in_dict(marker_dict, name):
+#         return remove_marker(name) in marker_dict or add_marker(name) in marker_dict
 
-    def dict_get(marker_dict, name):
-        name_with_marker = add_marker(name)
-        name_without_marker = remove_marker(name)
-        if name_without_marker in marker_dict:
-            return marker_dict[name_without_marker]
-        elif name_with_marker in marker_dict:
-            return marker_dict[name_with_marker]
-        else:
-            raise KeyError(name)
+#     def dict_get(marker_dict, name):
+#         name_with_marker = add_marker(name)
+#         name_without_marker = remove_marker(name)
+#         if name_without_marker in marker_dict:
+#             return marker_dict[name_without_marker]
+#         elif name_with_marker in marker_dict:
+#             return marker_dict[name_with_marker]
+#         else:
+#             raise KeyError(name)
     
-    return has_marker, add_marker, remove_marker, in_dict, dict_get
+#     return has_marker, add_marker, remove_marker, in_dict, dict_get
 
-_has_edit_marker, _add_edit_marker, _remove_edit_marker, _in_dict_edit, _dict_get_edit = _create_marker_dict_functions(_edit_marker_char)
-_has_untracked_marker, _add_untracked_marker, _remove_untracked_marker, _in_dict_untracked, _dict_get_untracked = _create_marker_dict_functions(_untracked_marker_char)
+# _has_edit_marker, _add_edit_marker, _remove_edit_marker, _in_dict_edit, _dict_get_edit = _create_marker_dict_functions(_edit_marker_char)
+# _has_untracked_marker, _add_untracked_marker, _remove_untracked_marker, _in_dict_untracked, _dict_get_untracked = _create_marker_dict_functions(_untracked_marker_char)
+
+
+class EditDict(dict):
+    _original = 0
+    _edited = 1
+    _deleted = 2
+
+    _edit_marker_char = '.'
+
+    def __init__(self, input_dict):
+        self._key_statuses = {}
+
+        adjusted_dict = {}
+        for key, value in input_dict.items():
+            if value is None:
+                self._key_statuses[key] = EditDict._deleted
+            elif key != '' and key[-1] == EditDict._edit_marker_char:
+                clean_key = key[:-1]
+                adjusted_dict[clean_key] = value
+                self._key_statuses[clean_key] = EditDict._edited
+            else:
+                adjusted_dict[key] = value
+                self._key_statuses[key] = EditDict._original
+
+        super().__init__(adjusted_dict)
+    
+    def __setitem__(self, key, value):
+        if key not in self or self[key] != value:
+            self._key_statuses[key] = EditDict._edited
+        super().__setitem__(key, value)
+    
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        self._key_statuses[key] = EditDict._deleted
+    
+    def mark_edited(self, key):
+        self._key_statuses[key] = EditDict._edited
+
+    def write(self):
+        output = {}
+        for key, status in self._key_statuses.items():
+            if status == EditDict._original:
+                output[key] = self[key]
+            elif status == EditDict._edited:
+                output[key + EditDict._edit_marker_char] = self[key]
+            else:
+                output[key] = None
+        return output
+
 
 
 def _shallow_type_check(name, value, template):
@@ -58,29 +107,28 @@ class JSONDict:
         if self._template is None:
             return
         for name, data_value in self._data.items():
-            name = _remove_edit_marker(name)
             self._check_name(name)
-            template_value = _dict_get_untracked(self._template, name)
+            template_value = self._template[name]
             _shallow_type_check(f'{self._type_name}.{name}', data_value, template_value)
             if isinstance(template_value, list) or isinstance(template_value, dict):
                 self.__getattr__(name)
 
     def _check_name(self, name):
-        if self._template is not None and not _in_dict_untracked(self._template, name):
+        if self._template is not None and name not in self._template:
             raise AttributeError(f'{self._type_name} has no attribute \'{name}\'')
     
     def __getattr__(self, name):
         name = name.replace('_', ' ')
         self._check_name(name)
         
-        if _in_dict_edit(self._data, name):
-            data_value = _dict_get_edit(self._data, name)
+        if name in self._data:
+            data_value = self._data[name]
             if data_value is None:
                 return None
             if self._template is None:
                 template_value = None
             else:
-                template_value = _dict_get_untracked(self._template, name)
+                template_value = self._template[name]
             if isinstance(template_value, dict) or (template_value is None and isinstance(data_value, dict)):
                 if template_value == {}:
                     template_value = None
