@@ -2,8 +2,5 @@ from settings import *
 from json_interface import *
 
 
-
-
-
-def record(data):
-    return JSONDict('person', student_template, data)
+class YearbookDatabase:
+    def __init__(self, )

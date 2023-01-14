@@ -2,6 +2,7 @@
     "branches": {
         "": {
             "name": "",
+            "parent": "",
             "start": "",
             "end": ""
         }

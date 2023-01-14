@@ -318,3 +318,55 @@ annnyway I can do that later. right now I just need the basics to work.
 If a branch is merged into another one, that means that that branch can finish entirely and not have an open end.
 So you can’t only reference a branch by the end. Sometimes you also need the start.
 I think for each branch I will store the start, and the end if there is one
+
+it should be possible to insert a new commit between two old ones, if you want to make an edit that affects multiple branches after it.
+(can you also merge a branch into the middle of another branch?)
+
+
+okay hmm what goes in each settings? system vs year
+I guess my question is: am I trying to make something that people from other schools can use?
+calder. if they are going to use it, they should fork it
+(maybe? but there would be something better about having code that we maintain together)
+
+okay
+how would it work if other schools were using the *same repository*
+oh right. the settings file is untracked by git. So everyone is supposed to put in their own settings file.
+which then determines everything else.
+
+my main question is:
+should the student template be stored on a per-year basis? or per-school?
+to answer this I can also think about: what other things go along with the student template
+much of the data processing code. Assuming that, between years, you might collect different types of data, and collect them from different sources.
+with this code, it makes sense to keep it in one place and just update it between years
+
+okay so I guess there are actually three areas:
+- The code that handles everything abstractly
+- Code specific to a school
+- Code specific to a school and a year
+Each of these should live in different folders, different repositories, but still be able to interact with each other.
+
+use
+importlib.util.spec_from_file_location
+or something similar
+to import school code into the base code
+(school code i.e. the functionality that handles all the specific data)
+
+…
+the school code does need to import from the base code though
+since base code handles the database and CLI, and has useful helper functions
+how to manage that? given that they might be in different folders
+
+what do I need to test now?
+
+
+oh hmm
+so it seems like what I *want* is to use a Git submodule
+actually maybe not
+
+a hacky solution is to just make sure the directories are siblings
+
+okay but
+I don’t want people to have to know much about Git (or even anything about Git) to use this
+like you should be able to just download the files and then use it.
+I will not use submodules
+I think the best solution is just to keep them as siblings.
