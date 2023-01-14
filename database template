@@ -1,9 +1,25 @@
 {
-    "main branch": "",
+    "branches": {
+        "": {
+            "name": "",
+            "start": "",
+            "end": ""
+        }
+    },
+    "next branch id": "",
     "views": [],
+    "working branch": "",
     "commits": {
         "": {
-            
+            "previous": [""],
+            "next": "",
+            "branches": [
+                {
+                    "name": "",
+                    "id": ""
+                }
+            ],
+            "records": [{}]
         }
     }
 }

@@ -238,3 +238,83 @@ meaning: the 37th commit on branch 1 of branch 2 of branch 0 of branch 0
 
 the whole structure though is a dictionary
 so you can easily get to a commit just by getting its id
+
+
+okay so…
+I want to use my interface to edit the database
+however, right now the interface keeps track of edits by default. I don’t want that.
+I think the better thing to do is to make a separate class that extends dict, which keeps track of edits itself. then mostly that can be ignored in the json interface
+hmm that might not really work though?
+
+
+okay now that I have had that detour
+how exactly does the commit structure work? how do you access a specific branch? how do you tell whether the thing at the end is being edited?
+oh. I think:
+the last thing in a branch is *always* the uncommitted version.
+so something is uncommitted iff the next field is empty
+
+do branches need names? It could be nice.
+and when you have multiple branches at one point, does one need to be the main branch?
+well. it depends on how branches will be used!
+A branch is created when you edit an old commit (or create a branch manually)
+
+okay wait. what does this choice actually affect? it’s mainly the id of a commit
+no it’s more than that. It also affects how commits are displayed
+if you want to swit
+nopem!ch to a branch, you need to know what is the point of that branch.
+but you can figure that out by looking at the commit messages too…
+okay but if you want to have a view onto a branch, you need to give it a name
+
+do we want the ability to insert a new commit between old ones?
+no. there is no need for that.
+
+ok. so how do branch names work?
+(and branches in general)
+I think:
+Whenever you make a branch, you’re always branching *off* of some main branch. Rather than splitting into two equal branches.
+
+maybe?
+but what if you want to give a name to the “main” at a split
+
+better idea:
+it is always just an even fork. and you can name/annotate any/all/none of the sides
+the only notion of “main” comes from choosing what the main branch is (?)
+
+however:
+you don’t want it to be that, anytime you go back to create a new branch, it removes the name of the branch you had been on.
+I think the way it should work is:
+each branch has a name. the staring one is called “main” and maybe isn’t changeable? not sure
+at a branch point, if a branch has no name, then it takes on the name of what leads into it
+(can only have one such branch)
+
+okay I think I know, finally
+each commit has a "next" field, which tells you the next commit on the *same* branch
+and an optional "branches" field, which tells you of any branches that exist at this point. Those must have names
+
+Must all branches have different names?
+well. when do you even need to access a branch by name?
+when you are creating a views
+
+I think there should be a dict of branch names to branch IDs, and linking to both the start and the end
+actually are there branch ids? I think you just need the id of the start commit (or end)
+
+at this point I also need to decide something else:
+does each commit store a backlink to the commit before?
+or, otherwise, how do you build up the complete values at a commit?
+backlink could be pretty fine. Just use recursion, or work your way back using a loop
+
+the remaining question is whether I want merging to be an option
+now I think that storing just the changes that are made in each one makes merging easier, since there are fewer records to compare
+but there still could be conflicts. I guess there are a few ways to manage that:
+- automatically choose from one or the other
+- manually choose for each of them (might require making a new file?)
+
+Okay. I think when you want to merge, you specify which of the two should be the default. (Potentially on a per-attribute basis?) But then it gives you a view where you can make manual changes if you want.
+well. I’ll figure that out later.
+it will have to compare what changes have happened since the most recent time they each diverged.
+
+annnyway I can do that later. right now I just need the basics to work.
+
+If a branch is merged into another one, that means that that branch can finish entirely and not have an open end.
+So you can’t only reference a branch by the end. Sometimes you also need the start.
+I think for each branch I will store the start, and the end if there is one

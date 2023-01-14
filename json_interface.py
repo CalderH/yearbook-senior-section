@@ -103,7 +103,10 @@ class JSONDict:
                     item_template = None
                 else:
                     item_template = template_value[0]
-                return JSONList(self._element_type_name(name), item_template, data_value, self, name, mark_edits=self._mark_edits)
+                if self._mark_edits:
+                    return JSONList(self._element_type_name(name), item_template, data_value, edit_marker_obj=self, edit_marker_key=name)
+                else:
+                    return JSONList(self._element_type_name(name), item_template, data_value, mark_edits=False)
             else:
                 return data_value
         else:
@@ -123,7 +126,7 @@ class JSONDict:
             if isinstance(template_value, dict) and template_value != {}:
                 JSONDict(type_name, template_value, value)
             if isinstance(template_value, list) and template_value != []:
-                JSONList(type_name, template_value[0], value, self, name)
+                JSONList(type_name, template_value[0], value)
         
         if self._mark_edits:
             name_with_marker = _add_edit_marker(name)
@@ -168,7 +171,7 @@ class JSONDict:
 
 
 class JSONList:
-    def __init__(self, type_name, item_template, data, edit_marker_obj, edit_marker_key, mark_edits=True):
+    def __init__(self, type_name, item_template, data, edit_marker_obj=None, edit_marker_key=None, mark_edits=True):
         self._type_name = type_name
         self._item_template = item_template
         self._data = data
@@ -200,7 +203,7 @@ class JSONList:
                 item_template = None
             else:
                 item_template = self._item_template[0]
-            return JSONList(name, item_template, item, self._edit_marker_obj, self._edit_marker_key, mark_edits=self._mark_edits)
+            return JSONList(name, item_template, item, edit_marker_obj=self._edit_marker_obj, edit_marker_key=self._edit_marker_key, mark_edits=self._mark_edits)
         else:
             return item
 
@@ -221,7 +224,7 @@ class JSONList:
         if isinstance(self._item_template, dict) and self._item_template != {}:
             JSONDict(type_name, self._item_template, value)
         if isinstance(self._item_template, list) and self._item_template != []:
-            JSONList(type_name, self._item_template[0], value, self._edit_marker_obj, self._edit_marker_key)
+            JSONList(type_name, self._item_template[0], value)
     
     def __setitem__(self, index, value):
         current_value = self._data[index]
