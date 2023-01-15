@@ -1,2 +1,2 @@
-# liber-senior-section
-A database system for the senior section of Liber Brunensis, the Brown yearbook
+# yearbook_core
+A database system for the yearbook senior sections

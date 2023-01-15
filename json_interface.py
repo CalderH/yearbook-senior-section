@@ -112,6 +112,9 @@ class JSONDict:
         else:
             return None
     
+    def __getitem__(self, name):
+        return self.__getattr__(name)
+    
     def __setattr__(self, name, value):
         name = name.replace('_', ' ')
         
