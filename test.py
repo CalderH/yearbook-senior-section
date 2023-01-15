@@ -1,8 +1,8 @@
-# from settings import *
-# from json_interface import *
+import sys, inspect, os.path
 
-# student_template = {'': 1}
-# data = {'a': 'hi'}
+filename = inspect.getframeinfo(inspect.currentframe()).filename
+path = os.path.dirname(os.path.abspath(filename))
+path = os.path.dirname(path)
+sys.path.append(path)
 
-# o = JSONDict('person', student_template, data)
-# print(o)
+import yearbook_core as core

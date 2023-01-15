@@ -1,3 +1,2 @@
-import yearbook_setup
-
-setup = yearbook_setup.setup
+from .runner import run
+from .json_interface import JSONDict

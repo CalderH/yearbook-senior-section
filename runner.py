@@ -2,7 +2,7 @@ import json
 import os.path
 
 
-def setup():
+def run():
     with open('settings.json') as file:
         settings = json.load(file)
     
@@ -19,4 +19,4 @@ def setup():
     with open('student_template.json') as file:
         student_template = json.load(file)
     
-    return settings, year_settings, path_to, student_template
+    print(year_settings)

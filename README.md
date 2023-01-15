@@ -1,2 +1,2 @@
 # yearbook_core
-A database system for the yearbook senior sections
+A database and layout system for yearbook senior sections
