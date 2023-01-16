@@ -1,2 +1,3 @@
 from .runner import run
-from .json_interface import JSONDict
+from .yearbook_setup import *
+

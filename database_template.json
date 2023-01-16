@@ -1,0 +1,39 @@
+{
+    "branches": {
+        "": {
+            "name": "",
+            "parent": "",
+            "start": "",
+            "end": ""
+        }
+    },
+    "views": {
+        "": {
+            "path": "",
+            "mode": "",
+            "branch": {
+                "id": ""
+            },
+            "commit": {
+                "id": ""
+            },
+            "merge": {
+                "primary id": "",
+                "secondary id": ""
+            }
+        }
+    },
+    "working branch": "",
+    "next commit id": "",
+    "next branch id": "",
+    "commits": {
+        "": {
+            "previous": "",
+            "next": "",
+            "branch": "",
+            "branches in": [""],
+            "branches out": [""],
+            "records": [{}]
+        }
+    }
+}

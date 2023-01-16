@@ -112,8 +112,14 @@ class JSONDict:
         else:
             return None
     
+    def __hasattr__(self, name):
+        return _in_dict_edit(self._data, name) and _dict_get_edit(self._data, name) is not None
+    
     def __getitem__(self, name):
         return self.__getattr__(name)
+    
+    def __contains(self, name):
+        return self.__hasattr__(self, name)
     
     def __setattr__(self, name, value):
         name = name.replace('_', ' ')
