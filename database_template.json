@@ -28,6 +28,7 @@
     "next branch id": "",
     "commits": {
         "": {
+            "message": "",
             "previous": "",
             "next": "",
             "branch": "",
