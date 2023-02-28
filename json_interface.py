@@ -133,7 +133,13 @@ class JSONDict:
         self.__setattr__(name, value)
     
     def __delitem__(self, name):
-        self.__delattr__(name)           
+        self.__delattr__(name)
+    
+    def __eq__(self, other):
+        return isinstance(other, JSONDict) \
+            and self._type_name == other._type_name \
+            and self._template == other._template \
+            and self._data == other._data
 
     def __repr__(self):
         return f'{self._type_name}: {self._data}'
@@ -202,6 +208,12 @@ class JSONList:
     def append(self, value):
         self._recursive_check_types(value)
         self._data.append(value)
+
+    def __eq__(self, other):
+        return isinstance(other, JSONList) \
+            and self._type_name == other._type_name \
+            and self._item_template == other._item_template \
+            and self._data == other._data
     
     def __repr__(self):
         return f'{self._type_name}: {self._data}'

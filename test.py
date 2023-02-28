@@ -9,7 +9,9 @@ template = {'a': [{'x': 1}], 'b': {'c': 1, 'd': 1}}
 
 x = JSONDict('test', template, {'a': [{'x': 1}, {'x': 2}]})
 y = x._copy()
+print(x == y)
 y.a[1].x = 10
+print(x == y)
 print(x)
 print(y)
 delta = calculate_delta(x, y)
