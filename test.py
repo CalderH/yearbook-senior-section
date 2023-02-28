@@ -1,7 +1,6 @@
-from json_interface import *
+from database import Database
+from id_tools import *
 
-template = {'a': [1]}
-value = {'a': [3]}
+db = Database('')
+db.setup()
 
-x = JSONDict('thing', template, value)
-print(x)

@@ -1,3 +1,6 @@
+from json import dumps
+
+
 def underscores_to_spaces(name):
     return name.replace('_', ' ')
 
@@ -130,6 +133,9 @@ class JSONDict:
     
     def __str__(self):
         return self.__repr__()
+    
+    def print(self):
+        print(dumps(self._data, indent=4))
 
 
 class JSONList:
@@ -190,4 +196,6 @@ class JSONList:
     
     def __str__(self):
         return self.__repr__()
-        
+    
+    def print(self):
+        print(dumps(self._data, indent=4))    

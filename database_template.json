@@ -5,7 +5,8 @@
             "name": "",
             "parent": "",
             "start": "",
-            "end": ""
+            "end": "",
+            "open": true
         }
     },
     "views": {
@@ -36,7 +37,7 @@
             "branches out": [""],
             "insertion before": "",
             "ignore": {"": [""]},
-            "records": [{}]
+            "records": {}
         }
     }
 }
