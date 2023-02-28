@@ -1,4 +1,5 @@
 from json import dumps
+from copy import deepcopy
 
 
 def underscores_to_spaces(name):
@@ -93,8 +94,14 @@ class JSONDict:
     def __hasattr__(self, name):
         return name in self._data and self._data[name] is not None
     
+    def __iter__(self):
+        return {name: value for name, value in self._data if value is not None}
+    
     def __setattr__(self, name, value):
         name = underscores_to_spaces(name)
+
+        if isinstance(value, JSONDict) or isinstance(value, JSONList):
+            value = value._data
         
         if self._template is not None:
             self._check_name(name)
@@ -120,19 +127,22 @@ class JSONDict:
         return self.__getattr__(name)
     
     def __contains__(self, name):
-        return self.__hasattr__(self, name)
+        return self.__hasattr__(name)
     
     def __setitem__(self, name, value):
         self.__setattr__(name, value)
     
     def __delitem__(self, name):
-        self.__delattr__(name)
+        self.__delattr__(name)           
 
     def __repr__(self):
         return f'{self._type_name}: {self._data}'
     
     def __str__(self):
         return self.__repr__()
+    
+    def _copy(self):
+        return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data))
     
     def print(self):
         print(dumps(self._data, indent=4))
@@ -181,6 +191,8 @@ class JSONList:
             JSONList(self._item_type_name, self._item_template[0], value)
     
     def __setitem__(self, index, value):
+        if isinstance(value, JSONDict) or isinstance(value, JSONList):
+            value = value._data
         self._recursive_check_types(value)
         self._data[index] = value
     
@@ -197,5 +209,50 @@ class JSONList:
     def __str__(self):
         return self.__repr__()
     
+    def _copy(self):
+        return JSONDict(self._type_name, deepcopy(self._item_template), deepcopy(self._data))
+    
     def print(self):
         print(dumps(self._data, indent=4))    
+
+
+def calculate_delta(old, new):
+    if old._type_name != new._type_name or old._template != new._template:
+        raise TypeError('Cannot calculate delta for data of different types')
+
+    type_name = old._type_name
+    template = old._template
+    delta = JSONDict(type_name, template, {})
+    for name in template:
+        if name in old and name in new:
+            old_value = old[name]
+            new_value = new[name]
+            if isinstance(old_value, JSONDict) and isinstance(new_value, JSONDict):
+                if new_value._type_name != old_value._type_name or new_value._template != old_value._template:
+                    delta[name] = new_value
+                elif new_value._data != old_value._data:
+                    delta[name] = calculate_delta(old_value, new_value)
+            elif isinstance(old_value, JSONList) and isinstance(new_value, JSONList):
+                if new_value._data != old_value._data:
+                    delta[name] = new_value
+            elif new_value != old_value:
+                delta[name] = new_value
+        elif name in old:
+            delta[name] = None
+        elif name in new:
+            delta[name] = new_value
+    
+    return delta
+
+
+def add_delta(old, delta):
+    new = old._copy()
+    for name in delta._data:
+        value = delta[name]
+        if value is None and name in new:
+            del new[name]
+        elif isinstance(value, JSONDict):
+            new[name] = add_delta(new[name], value)
+        else:
+            new[name] = value
+    return new
