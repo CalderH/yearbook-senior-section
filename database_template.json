@@ -15,7 +15,7 @@
             "branch": {
                 "id": ""
             },
-            "commit": {
+            "change": {
                 "id": ""
             },
             "merge": {
@@ -25,9 +25,9 @@
         }
     },
     "working branch": "",
-    "next commit id": "",
+    "next change id": "",
     "next branch id": "",
-    "commits": {
+    "changes": {
         "": {
             "message": "",
             "previous": "",
@@ -37,7 +37,8 @@
             "branches out": [""],
             "insertion before": "",
             "ignore": {"": [""]},
-            "records": {}
+            "deltas": {"": {}},
+            "unchecked": {"": [""]}
         }
     }
 }

@@ -23,6 +23,7 @@ if os.path.exists('paths.json'):
         return os.path.join(_core_path_head, core_settings[key], *args)
 
     def school_path(key, *args):
+        print(_school_path_head)
         return os.path.join(_school_path_head, school_settings[key], *args)
 
     def year_path(key, *args):
