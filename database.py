@@ -51,26 +51,26 @@ class Database:
         # TODO
         pass
 
-    def update_open_version(self, deltas, branch=None, unchecked=None):
-        if branch is None:
-            branch = self.data.working_branch
-        branch_info = self.data.branches[branch]
-        if not branch_info.open:
+    def update_open_version(self, deltas, branch_id=None, unchecked=None):
+        if branch_id is None:
+            branch_id = self.data.working_branch
+        branch = self.data.branches[branch_id]
+        if not branch.open:
             raise YBDBException('Attempted to update the deltas on a committed version')
-        version = self.data.versions[branch_info.end]
+        version = self.data.versions[branch.end]
         version.deltas = deltas
         if unchecked is not None:
             version.unchecked = unchecked
         self.save()
     
-    def commit_version(self, branch=None):
-        if branch is None:
-            branch = self.data.working_branch
-        branch_info = self.data.branches[branch]
-        if not branch_info.open:
+    def commit_version(self, branch_id=None):
+        if branch_id is None:
+            branch_id = self.data.working_branch
+        branch = self.data.branches[branch_id]
+        if not branch.open:
             raise YBDBException('Attempted to commit to a closed branch')
         
-        current_version_id = branch_info.end
+        current_version_id = branch.end
         new_version_id = self.data.next_version_id
         current_version = self.data.versions[current_version_id]
         if current_version.unchecked is not None:
@@ -78,11 +78,11 @@ class Database:
         
         self.data.versions[new_version_id] = {}
         new_version = self.data.versions[new_version_id]
-        new_version.branch = branch
+        new_version.branch = branch_id
         new_version.deltas = {}
         current_version.next = new_version_id
         new_version.previous = current_version_id
-        branch_info.end = new_version_id
+        branch.end = new_version_id
 
         self.data.next_version_id = next_id(new_version_id)
 
@@ -114,4 +114,6 @@ class Database:
         
         self.data.next_version_id = next_id(self.data.next_version_id)
         self.data.next_branch_id = next_id(self.data.next_branch_id)
-        
+    
+    def merge_branches(self, primary_id, secondary_id):
+        pass

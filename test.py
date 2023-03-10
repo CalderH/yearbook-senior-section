@@ -2,18 +2,12 @@ from database import Database
 from id_tools import *
 from json_interface import *
 
-db = Database('')
-db.setup()
+# db = Database('')
+# db.setup()
 
-# template = {'a': [{'x': 1}], 'b': {'c': 1, 'd': 1}}
+template = {'a': {'b': 0}}
 
-# x = JSONDict('test', template, {'a': [{'x': 1}, {'x': 2}]})
-# y = x._copy()
-# print(x == y)
-# y.a[1].x = 10
-# print(x == y)
-# print(x)
-# print(y)
-# delta = calculate_delta(x, y)
-# print(delta)
-# print(add_delta(x, delta))
+x = JSONDict('test', template, {})
+a = x.a = {}
+print(type(x.a))
+print(type(a))
