@@ -33,14 +33,14 @@ def next_id(id):
 class ID(Enum):
     record = 0
     r = 0
-    commit = 1
-    c = 1
+    version = 1
+    v = 1
     branch = 2
     b = 2
     view = 3
-    v = 3
+    w = 3
 
-id_to_letter = {ID.r: 'r', ID.c: 'c', ID.b: 'b', ID.v: 'v'}
+id_to_letter = {ID.r: 'r', ID.v: 'v', ID.b: 'b', ID.w: 'w'}
 letter_to_id = {letter: id for id, letter in id_to_letter.items()}
 
 separator = ','

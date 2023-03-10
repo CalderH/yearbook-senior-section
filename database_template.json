@@ -15,7 +15,7 @@
             "branch": {
                 "id": ""
             },
-            "change": {
+            "version": {
                 "id": ""
             },
             "merge": {
@@ -25,9 +25,9 @@
         }
     },
     "working branch": "",
-    "next change id": "",
+    "next version id": "",
     "next branch id": "",
-    "changes": {
+    "versions": {
         "": {
             "message": "",
             "previous": "",

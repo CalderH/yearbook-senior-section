@@ -51,41 +51,67 @@ class Database:
         # TODO
         pass
 
-    def update_open_change(self, deltas, branch=None, unchecked=None):
+    def update_open_version(self, deltas, branch=None, unchecked=None):
         if branch is None:
             branch = self.data.working_branch
         branch_info = self.data.branches[branch]
         if not branch_info.open:
-            raise YBDBException('Attempted to update the deltas on a committed change')
-        change = self.data.changes[branch_info.end]
-        change.deltas = deltas
+            raise YBDBException('Attempted to update the deltas on a committed version')
+        version = self.data.versions[branch_info.end]
+        version.deltas = deltas
         if unchecked is not None:
-            change.unchecked = unchecked
+            version.unchecked = unchecked
         self.save()
     
-    def commit_change(self, branch=None):
+    def commit_version(self, branch=None):
         if branch is None:
             branch = self.data.working_branch
         branch_info = self.data.branches[branch]
         if not branch_info.open:
-            raise YBDBException('Attempted to commit a change that is already committed')
+            raise YBDBException('Attempted to commit to a closed branch')
         
-        current_change_id = branch_info.end
-        new_change_id = self.data.next_change_id
-        current_change = self.data.changes[current_change_id]
-        if current_change.unchecked is not None:
-            raise YBDBException('Cannot commit a change with unchecked edits')
+        current_version_id = branch_info.end
+        new_version_id = self.data.next_version_id
+        current_version = self.data.versions[current_version_id]
+        if current_version.unchecked is not None:
+            raise YBDBException('Cannot commit a version with unchecked edits')
         
-        self.data.changes[new_change_id] = {}
-        new_change = self.data.changes[new_change_id]
-        new_change.branch = branch
-        new_change.deltas = {}
-        current_change.next = new_change_id
-        new_change.previous = current_change_id
-        branch_info.end = new_change_id
+        self.data.versions[new_version_id] = {}
+        new_version = self.data.versions[new_version_id]
+        new_version.branch = branch
+        new_version.deltas = {}
+        current_version.next = new_version_id
+        new_version.previous = current_version_id
+        branch_info.end = new_version_id
 
-        self.data.next_change_id = next_id(new_change_id)
+        self.data.next_version_id = next_id(new_version_id)
 
         self.save()
 
+    def new_branch(self, version_id, name):
+        if version_id not in self.data.versions:
+            raise YBDBException(f'There is no version with id {version_id}')
+
+        start_version = self.data.versions[version_id]
+        new_branch_id = self.data.next_branch_id
+        self.data.branches[new_branch_id] = {}
+        new_branch = self.data.branches[new_branch_id]
+        new_branch.name = name
+        new_branch.parent = start_version.branch
+        new_branch.start = version_id
+
+        new_version_id = self.data.next_version_id
+        self.data.versions[new_version_id] = {}
+        new_version = self.data.versions[new_version_id]
+        new_version.previous = version_id
+        new_version.branch = new_branch_id
+        new_version.deltas = {}
+
+        new_branch.end = new_version_id
+        new_branch.open = True
+
+        start_version.branches_out.append(new_branch_id)
+        
+        self.data.next_version_id = next_id(self.data.next_version_id)
+        self.data.next_branch_id = next_id(self.data.next_branch_id)
         
