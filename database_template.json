@@ -5,22 +5,25 @@
             "name": "",
             "parent": "",
             "start": "",
-            "end": "",
-            "open": true
+            "end": ""
         }
     },
     "views": {
         "": {
             "path": "",
             "branch": {
-                "id": ""
+                "id": "",
+                "records": [""],
+                "attributes": [""]
             },
             "version": {
-                "id": ""
+                "id": "",
+                "records": [""],
+                "attributes": [""]
             },
             "merge": {
-                "primary id": "",
-                "secondary id": ""
+                "primary": "",
+                "secondary": [""]
             }
         }
     },
@@ -33,12 +36,50 @@
             "previous": "",
             "next": "",
             "branch": "",
-            "branches in": [""],
             "branches out": [""],
-            "insertion before": "",
-            "ignore": {"": [""]},
-            "deltas": {"": {}},
-            "unchecked": {"": [""]}
+            "merged to": [""],
+            "change": {
+                "deltas": {"": {}},
+                "unchecked": {"": [""]},
+                "revision": {
+                    "ignore": {
+                        "": {
+                            "all": true,
+                            "records": {
+                                "": {
+                                    "all": true,
+                                    "attributes": {"": true}
+                                }
+                            },
+                            "attributes": {"": true}
+                        }
+                    },
+                    "merge": {
+                        "": {
+                            "all": 0,
+                            "records": {
+                                "": {
+                                    "all": 0,
+                                    "attributes": {"": 0}
+                                }
+                            },
+                            "attributes": {"": 0}
+                        }
+                    }
+                }
+                
+            },
+            "merge": {
+                "secondary": [""],
+                "all": 0,
+                "records": {
+                    "": {
+                        "all": 0,
+                        "attributes": {"": 0}
+                    }
+                },
+                "attributes": {"": 0}
+            }
         }
     }
 }
