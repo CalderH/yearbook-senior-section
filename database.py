@@ -19,7 +19,6 @@ class Database:
     
     def setup(self):
         base_version_id = convert_id(start_id, ID.v)
-        end_version_id = next_id(base_version_id)
         main_branch_id = convert_id(start_id, ID.b)
 
         self.data = JSONDict('database', database_template, {})
@@ -29,25 +28,30 @@ class Database:
         main_branch = self.data.branches[main_branch_id]
         main_branch.name = 'main'
         main_branch.start = base_version_id
-        main_branch.end = end_version_id
-        main_branch.open = True
+        main_branch.end = base_version_id
         self.data.working_branch = main_branch_id
 
         self.data.views = {}
 
-        self.data.next_version_id = next_id(end_version_id)
+        self.data.next_version_id = next_id(base_version_id)
         self.data.next_branch_id = next_id(main_branch_id)
 
-        self.data.versions = {base_version_id: {}, end_version_id: {}}
+        self.data.versions = {base_version_id: {}}
         base_version = self.data.versions[base_version_id]
         base_version.message = 'Base'
         base_version.branch = main_branch_id
-        base_version.next = end_version_id
 
-        end_version = self.data.versions[end_version_id]
-        end_version.branch = main_branch_id
-        end_version.previous = base_version_id
         self.save()
+    
+    def _next_version_id(self):
+        output = self.data.next_version_id
+        self.data.next_version_id = next_id(output)
+        return output
+
+    def _next_branch_id(self):
+        output = self.data.next_branch_id
+        self.data.next_branch_id = next_id(output)
+        return output
     
     def load(self):
         with open(self.path) as file:
@@ -61,18 +65,15 @@ class Database:
         # TODO
         pass
     
-    def commit_version(self, branch_id=None):
-        if branch_id is None:
-            branch_id = self.data.working_branch
+    def commit(self, branch_id):
         branch = self.data.branches[branch_id]
-        if not branch.open:
-            raise YBDBException('Attempted to commit to a closed branch')
         
         current_version_id = branch.end
-        new_version_id = self.data.next_version_id
         current_version = self.data.versions[current_version_id]
         if current_version.change is not None and current_version.change.unchecked is not None:
             raise YBDBException('Cannot commit a version with unchecked edits')
+        
+        new_version_id = self._next_version_id()
         
         self.data.versions[new_version_id] = {}
         new_version = self.data.versions[new_version_id]
@@ -81,16 +82,10 @@ class Database:
         new_version.previous = current_version_id
         branch.end = new_version_id
 
-        self.data.next_version_id = next_id(new_version_id)
-
         self.save()
     
-    def change_open_version(self, deltas, branch_id=None, unchecked=None):
-        if branch_id is None:
-            branch_id = self.data.working_branch
+    def change_open_version(self, deltas, branch_id, unchecked=None):
         branch = self.data.branches[branch_id]
-        if not branch.open:
-            raise YBDBException('Attempted to update the deltas on a committed version')
         version = self.data.versions[branch.end]
         if 'change' not in version:
             version.change = {}
@@ -104,26 +99,24 @@ class Database:
             raise YBDBException(f'There is no version with id {version_id}')
 
         start_version = self.data.versions[version_id]
-        new_branch_id = self.data.next_branch_id
+        new_branch_id = self._next_branch_id()
         self.data.branches[new_branch_id] = {}
         new_branch = self.data.branches[new_branch_id]
         new_branch.name = name
         new_branch.parent = start_version.branch
-        new_branch.start = version_id
 
-        new_version_id = self.data.next_version_id
+        new_version_id = self._next_version_id()
         self.data.versions[new_version_id] = {}
         new_version = self.data.versions[new_version_id]
         new_version.previous = version_id
         new_version.branch = new_branch_id
 
+        new_branch.start = version_id
         new_branch.end = new_version_id
         new_branch.open = True
 
         start_version.branches_out.append(new_branch_id)
-        
-        self.data.next_version_id = next_id(self.data.next_version_id)
-        self.data.next_branch_id = next_id(self.data.next_branch_id)
     
-    def merge_branches(self, primary_id, secondary_ids):
+    def merge_branches(self, destination_branch_id, source_commit_ids,
+                       ):
         pass
