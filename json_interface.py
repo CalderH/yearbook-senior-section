@@ -1,6 +1,8 @@
 from json import dumps
 from copy import deepcopy
 
+import traceback
+
 
 def underscores_to_spaces(name):
     return name.replace('_', ' ')
@@ -17,16 +19,40 @@ def _is_choice(template):
 def _shallow_type_check(name, value, template):
         if template is None or value is None:
             return
-        if _is_choice(template):
-            if value in template:
-                return
-            else:
-                raise TypeError(f'{name} must be one of {template}; it cannot be {str(value)}')
         type_names = {int: 'number', float: 'number', bool: 'boolean', str: 'string', list: 'list', dict: 'dict'}
         value_type_name = type_names[type(value)]
-        template_type_name = type_names[type(template)]
-        if value_type_name != template_type_name:
-            raise TypeError(f'{name} must be a {template_type_name}; it cannot be {str(value)}')
+        if _is_choice(template):
+            template_type_names = [type_names[type(choice)] for choice in template]
+            found_type = False
+            for choice in template:
+                choice_type_name = type_names[type(choice)]
+                if choice_type_name != value_type_name:
+                    continue
+                found_type = True
+                if choice_type_name == 'dict':
+                    # TODO make this not ugly
+                    try:
+                        JSONDict(name, choice, value)
+                        return
+                    except:
+                        pass
+                elif choice_type_name == 'list':
+                    try:
+                        JSONList(name, choice[0], value)
+                        return
+                    except:
+                        pass
+                else:
+                    return
+            if found_type:
+                raise TypeError(f'{name} must match one of {template}; it cannot be {str(value)}')
+            else:
+                raise TypeError(f'{name} must be one of the types {template_type_names}; it cannot be {str(value)}')
+            
+        else:
+            template_type_name = type_names[type(template)]
+            if value_type_name != template_type_name:
+                raise TypeError(f'{name} must be a {template_type_name}; it cannot be {str(value)}')
 
 
 class JSONDict:

@@ -5,9 +5,9 @@ from json_interface import *
 # db = Database('')
 # db.setup()
 
-template = {'a': {'b': 0}}
+template = {'a': [{'b': 1}, {'c': True}]}
 
-x = JSONDict('test', template, {})
-a = x.a = {}
-print(type(x.a))
-print(type(a))
+x = JSONDict('test', template, {'a': 1})
+# a = x.a = {}
+# print(type(x.a))
+# print(type(a))
