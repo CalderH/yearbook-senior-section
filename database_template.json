@@ -33,6 +33,7 @@
     "versions": {
         "": {
             "message": "",
+            "notes": "",
             "previous": "",
             "next": "",
             "branch": "",
@@ -44,40 +45,46 @@
                 "revision": {
                     "ignore": {
                         "": {
-                            "all": true,
+                            "default": {
+                                "all": true,
+                                "attributes": {"": true}
+                            },
                             "records": {
                                 "": {
                                     "all": true,
                                     "attributes": {"": true}
                                 }
-                            },
-                            "attributes": {"": true}
+                            }
                         }
                     },
                     "merge": {
                         "": {
-                            "all": 0,
+                            "default": {
+                                "all": "",
+                                "attributes": {"": 0}
+                            },
                             "records": {
                                 "": {
                                     "all": 0,
                                     "attributes": {"": 0}
                                 }
-                            },
-                            "attributes": {"": 0}
+                            }
                         }
                     }
                 }
             },
             "merge": {
-                "secondary": [""],
-                "all": 0,
+                "source": "",
+                "default": {
+                    "all": "",
+                    "attributes": {"": 0}
+                },
                 "records": {
                     "": {
                         "all": 0,
                         "attributes": {"": 0}
                     }
-                },
-                "attributes": {"": 0}
+                }
             }
         }
     }

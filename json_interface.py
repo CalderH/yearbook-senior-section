@@ -23,36 +23,41 @@ def _shallow_type_check(name, value, template):
         value_type_name = type_names[type(value)]
         if _is_choice(template):
             template_type_names = [type_names[type(choice)] for choice in template]
-            found_type = False
-            for choice in template:
-                choice_type_name = type_names[type(choice)]
-                if choice_type_name != value_type_name:
-                    continue
-                found_type = True
-                if choice_type_name == 'dict':
-                    # TODO make this not ugly
-                    try:
-                        JSONDict(name, choice, value)
-                        return
-                    except:
-                        pass
-                elif choice_type_name == 'list':
-                    try:
-                        JSONList(name, choice[0], value)
-                        return
-                    except:
-                        pass
-                else:
-                    return
-            if found_type:
-                raise TypeError(f'{name} must match one of {template}; it cannot be {str(value)}')
+
+            if len(set(template_type_names)) == 1:
+                if value not in template:
+                    raise TypeError(f'{name} must be one of {template}; it cannot be {repr(value)}')
             else:
-                raise TypeError(f'{name} must be one of the types {template_type_names}; it cannot be {str(value)}')
+                found_type = False
+                for choice in template:
+                    choice_type_name = type_names[type(choice)]
+                    if choice_type_name != value_type_name:
+                        continue
+                    found_type = True
+                    if choice_type_name == 'dict':
+                        # TODO make this not ugly
+                        try:
+                            JSONDict(name, choice, value)
+                            return
+                        except:
+                            pass
+                    elif choice_type_name == 'list':
+                        try:
+                            JSONList(name, choice[0], value)
+                            return
+                        except:
+                            pass
+                    else:
+                        return
+                if found_type:
+                    raise TypeError(f'{name} must match one of {template}; it cannot be {repr(value)}')
+                else:
+                    raise TypeError(f'{name} must be one of the types {template_type_names}; it cannot be {repr(value)}')
             
         else:
             template_type_name = type_names[type(template)]
             if value_type_name != template_type_name:
-                raise TypeError(f'{name} must be a {template_type_name}; it cannot be {str(value)}')
+                raise TypeError(f'{name} must be a {template_type_name}; it cannot be {repr(value)}')
 
 
 class JSONDict:
