@@ -2,7 +2,6 @@ import json
 from json_interface import *
 from yearbook_setup import core_path
 from id_tools import *
-from enum import Enum
 
 
 with open(core_path('database template')) as file:
@@ -11,15 +10,6 @@ with open(core_path('database template')) as file:
 
 class YBDBException(Exception):
     pass
-
-
-class merge_instruction(Enum):
-    g = use_global = 0
-    d = prefer_destination = 1
-    s = prefer_source = 2
-    dd = always_destination = 3
-    ss = always_source = 4
-minst = merge_instruction
 
 
 class Database:
@@ -137,20 +127,24 @@ class Database:
         new_branch.open = True
 
         start_version.branches_out.append(new_branch_id)
+
+        self.save()
     
-    # def merge_branches(self, destination_branch_id, source_version_id,
-    #                    default_instructions, record_instructions):
-    #     destination_branch = self.branch(destination_branch_id)
-    #     current_version_id = destination_branch.end
-    #     current_version = self.version(current_version_id)
+    def merge_branches(self, destination_branch_id, source_version_id,
+                       default_instructions, record_instructions):
+        destination_branch = self.branch(destination_branch_id)
+        current_version_id = destination_branch.end
+        current_version = self.version(current_version_id)
 
-    #     if current_version.change is not None:
-    #         raise YBDBException('Cannot merge to a branch with uncommitted changes')
+        if current_version.change is not None:
+            raise YBDBException('Cannot merge to a branch with uncommitted changes')
         
-    #     self.version(source_version_id)
+        self.version(source_version_id)
 
-    #     current_version.merge = {}
-    #     merge = current_version.merge
-    #     merge.source = source_version_id
-    #     merge.default = {}
-    #     if 
+        current_version.merge = {}
+        merge = current_version.merge
+        merge.source = source_version_id
+        merge.default = default_instructions
+        merge.records = record_instructions
+
+        self.save()

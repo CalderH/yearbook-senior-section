@@ -60,13 +60,13 @@
                     "merge": {
                         "": {
                             "default": {
-                                "all": "",
-                                "attributes": {"": 0}
+                                "all": ["", "d", "s", "d!", "s!"],
+                                "attributes": {"": ["", "d", "s", "d!", "s!"]}
                             },
                             "records": {
                                 "": {
-                                    "all": 0,
-                                    "attributes": {"": 0}
+                                    "all": ["", "d", "s", "d!", "s!"],
+                                    "attributes": {"": ["", "d", "s", "d!", "s!"]}
                                 }
                             }
                         }
@@ -76,13 +76,13 @@
             "merge": {
                 "source": "",
                 "default": {
-                    "all": "",
-                    "attributes": {"": 0}
+                    "all": ["", "d", "s", "d!", "s!"],
+                    "attributes": {"": ["", "d", "s", "d!", "s!"]}
                 },
                 "records": {
                     "": {
-                        "all": 0,
-                        "attributes": {"": 0}
+                        "all": ["", "d", "s", "d!", "s!"],
+                        "attributes": {"": ["", "d", "s", "d!", "s!"]}
                     }
                 }
             }
