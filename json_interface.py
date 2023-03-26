@@ -1,67 +1,122 @@
 from json import dumps
 from copy import deepcopy
+from typing import *
 
-import traceback
+
+JSONValue = Union[None, int, float, bool, str, list, dict]
 
 
-def underscores_to_spaces(name):
+def underscores_to_spaces(name: str) -> str:
     return name.replace('_', ' ')
 
+# Lists are used in templates to represent a few things
+# A list template with zero items represents a list value with no type restrictions
+# A list template with one item represents a list value, and the one item represents the type of all the elements
+# A list template with more than one item represents a single value, and the multiple items represent multiple options for that value
+#     If all the template values have the same type, then the value must equal one of the template values
+#     If the template values have multiple types, then the value must have the same type as one of the template values
+# 
+# For example:
+# [1]: a list where every item is a number
+# [1, True]: a single value that is either a number or a boolean
+# [1, 2]: a single value that is either 1 or 2
+# [[1, True]]: a list of items that can be either numbers or booleans
+# [[1, 2]]: a list of items that can only be 1 or 2
 
-def _is_list(template):
+def _is_list(template: JSONValue) -> bool:
+    """Returns whether this template represents a list."""
+
     return isinstance(template, list) and len(template) <= 1
 
 
-def _is_choice(template):
+def _is_choice(template: JSONValue) -> bool:
+    """Returns whether this template represents multiple options for a single value."""
+
     return isinstance(template, list) and len(template) > 1
 
 
-def _shallow_type_check(name, value, template):
-        if template is None or value is None:
-            return
-        type_names = {int: 'number', float: 'number', bool: 'boolean', str: 'string', list: 'list', dict: 'dict'}
-        value_type_name = type_names[type(value)]
-        if _is_choice(template):
-            template_type_names = [type_names[type(choice)] for choice in template]
+def _shallow_type_check(name: str, value: JSONValue, template: JSONValue):
+    """"""
 
-            if len(set(template_type_names)) == 1:
-                if value not in template:
-                    raise TypeError(f'{name} must be one of {template}; it cannot be {repr(value)}')
-            else:
-                found_type = False
-                for choice in template:
-                    choice_type_name = type_names[type(choice)]
-                    if choice_type_name != value_type_name:
-                        continue
-                    found_type = True
-                    if choice_type_name == 'dict':
-                        # TODO make this not ugly
+    # Null template matches everything
+    # Everything matches null value
+    if template is None or value is None:
+        return
+    
+    # Dict of type names
+    # Use for comparing types (since we're treating ints and floats as the same)
+    # and for error messages
+    type_names = {int: 'number', float: 'number', bool: 'boolean', str: 'string', list: 'list', dict: 'dict'}
+
+    value_type_name = type_names[type(value)]
+
+    # If the template represents multiple options for a single value
+    if _is_choice(template):
+        # Template is guaranteed to be a list now; tell that to the type checker
+        template = cast(list, template)
+
+        # Get the type name for everything in the template
+        template_type_names: list[str] = [type_names[type(choice)] for choice in template]
+
+        # If all the options in the template have the same type,
+        # then just check whether the value is equal to one of those options
+        if len(set(template_type_names)) == 1:
+            if value not in template:
+                raise TypeError(f'{name} must be one of {template}; it cannot be {repr(value)}')
+            
+        # Otherwise we need to check if the value matches the type and structure of one of those options
+        else:
+            # Check the value against each option one by one
+            found_type = False
+            for option in template:
+                # Skip over ones with a different type
+                option_type_name = type_names[type(option)]
+                if option_type_name != value_type_name:
+                    continue
+
+                # At this point we have found something with the same top-level type
+                found_type = True
+                # But it might not have the same structure (e.g. list of numbers vs list of strings)
+                if option_type_name == 'dict':
+                    try:
+                        # Creating a JSONDict will automatically check whether the structure is the same
+                        JSONDict(name, option, value)
+                        # If we get this far, then we have found an option that matches the value
+                        return
+                    except:
+                        pass
+                elif option_type_name == 'list':
+                    # There is the possibility that the option may be itself a choice of options
+                    # e.g. [[1, 2], 'a'] represents a value that can be 1, 2, or any string
+                    if _is_choice(option):
                         try:
-                            JSONDict(name, choice, value)
-                            return
-                        except:
-                            pass
-                    elif choice_type_name == 'list':
-                        try:
-                            JSONList(name, choice[0], value)
+                            _shallow_type_check(name, value, option)
                             return
                         except:
                             pass
                     else:
-                        return
-                if found_type:
-                    raise TypeError(f'{name} must match one of {template}; it cannot be {repr(value)}')
+                        try:
+                            # creating a JSONList will automatically check whether the structure is the same
+                            # have to take option[0] since JSONList inputs the type of an *item* of the list
+                            JSONList(name, option[0], value)
+                            return
+                        except:
+                            pass
                 else:
-                    raise TypeError(f'{name} must be one of the types {template_type_names}; it cannot be {repr(value)}')
-            
-        else:
-            template_type_name = type_names[type(template)]
-            if value_type_name != template_type_name:
-                raise TypeError(f'{name} must be a {template_type_name}; it cannot be {repr(value)}')
+                    return
+            if found_type:
+                raise TypeError(f'{name} must match one of {template}; it cannot be {repr(value)}')
+            else:
+                raise TypeError(f'{name} must be one of the types {template_type_names}; it cannot be {repr(value)}')
+        
+    else:
+        template_type_name = type_names[type(template)]
+        if value_type_name != template_type_name:
+            raise TypeError(f'{name} must be a {template_type_name}; it cannot be {repr(value)}')
 
 
 class JSONDict:
-    def __init__(self, type_name, template, data):
+    def __init__(self, type_name: str, template: Optional[dict], data: JSONValue):
         self.__dict__['_type_name'] = type_name
         self.__dict__['_template'] = template
         self.__dict__['_any_keys'] = template is not None and template.keys() == {''}
@@ -69,7 +124,7 @@ class JSONDict:
 
         self._type_check()
     
-    def _element_type_name(self, name):
+    def _element_type_name(self, name: str):
         if self._any_keys:
             return f'(element of {self._type_name})'
         else:
