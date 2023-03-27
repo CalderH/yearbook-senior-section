@@ -18,8 +18,8 @@ class Database:
         self.data = None
     
     def setup(self):
-        base_version_id = convert_id(start_id, ID.v)
-        main_branch_id = convert_id(start_id, ID.b)
+        base_version_id = convert_id(start_id, IDType.v)
+        main_branch_id = convert_id(start_id, IDType.b)
 
         self.data = JSONDict('database', database_template, {})
 

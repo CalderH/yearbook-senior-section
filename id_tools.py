@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Tuple, Optional
 
 initial_consonants = 'bcdfghjklmnprstvwyz'
 consonants = 'bcdfghjklmnprstvwxyz'
@@ -6,7 +7,9 @@ vowels = 'aeiou'
 
 start_id = 'ba'
 
-def next_id(id):
+def next_id(id: str) -> str:
+    """Given an ID, generates the next ID in the sequence of IDs"""
+
     id_letters, id_type = decompose_id(id)
     new_id = list(id_letters)
     for i in range(len(new_id) - 1, -1, -1):
@@ -30,35 +33,42 @@ def next_id(id):
             break
     return convert_id(''.join(new_id), id_type)
 
-class ID(Enum):
-    record = 0
-    r = 0
-    version = 1
-    v = 1
-    branch = 2
-    b = 2
-    view = 3
-    w = 3
+class IDType(Enum):
+    """The different things that an ID can be used for"""
+    record = r = 0
+    version = v = 1
+    branch = b = 2
+    view = w = 3
 
-id_to_letter = {ID.r: 'r', ID.v: 'v', ID.b: 'b', ID.w: 'w'}
+id_to_letter = {IDType.r: 'r', IDType.v: 'v', IDType.b: 'b', IDType.w: 'w'}
 letter_to_id = {letter: id for id, letter in id_to_letter.items()}
 
 separator = ','
 
 def convert_id(id, *args):
+    """Converts between IDs with prefixes and IDs without prefixes.
+
+    If you input just an ID, or an ID and None, it will output the ID without the prefix.
+    If you input a prefix-less ID and a prefix, it will combine them (with a separator in between).
+    """
     if len(args) == 0 or args[0] is None:
+        # Assumes that the prefix is one character long
         if len(id) >= 2 and id[1] == separator:
-            print(id)
             return id[2:]
         else:
             return id
     else:
         return id_to_letter[args[0]] + separator + id
     
-def decompose_id(id):
+def decompose_id(id: str) -> Tuple[str, Optional[IDType]]:
+    """Separates the prefix and suffix of an ID.
+
+    Returns a tuple contianing the suffix (the unique sequence of letters),
+    followed by the ID object representing the type of the ID (or none if the ID had no prefix)
+    """
     if len(id) >= 2 and id[1] == separator:
         return id[2:], letter_to_id[id[0]]
     else:
         return id, None
 
-__all__ = ['start_id', 'next_id', 'ID', 'convert_id', 'decompose_id']
+__all__ = ['start_id', 'next_id', 'IDType', 'convert_id', 'decompose_id']
