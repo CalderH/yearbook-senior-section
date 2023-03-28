@@ -1,11 +1,13 @@
 from enum import Enum
-from typing import Tuple, Optional
+from typing import Tuple, Optional, NewType
 
 initial_consonants = 'bcdfghjklmnprstvwyz'
 consonants = 'bcdfghjklmnprstvwxyz'
 vowels = 'aeiou'
 
 start_id = 'ba'
+
+ID = NewType('ID', str)
 
 def next_id(id: str) -> str:
     """Given an ID, generates the next ID in the sequence of IDs"""
@@ -71,4 +73,4 @@ def decompose_id(id: str) -> Tuple[str, Optional[IDType]]:
     else:
         return id, None
 
-__all__ = ['start_id', 'next_id', 'IDType', 'convert_id', 'decompose_id']
+__all__ = ['start_id', 'next_id', 'IDType', 'convert_id', 'decompose_id', 'ID']

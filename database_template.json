@@ -30,6 +30,7 @@
     "working branch": "",
     "next version id": "",
     "next branch id": "",
+    "next view id": "",
     "versions": {
         "": {
             "message": "",
@@ -41,48 +42,18 @@
             "merged to": [""],
             "change": {
                 "deltas": {"": {}},
-                "unchecked": {"": [""]},
-                "revision": {
-                    "ignore": {
-                        "": {
-                            "default": {
-                                "all": true,
-                                "attributes": {"": true}
-                            },
-                            "records": {
-                                "": {
-                                    "all": true,
-                                    "attributes": {"": true}
-                                }
-                            }
-                        }
-                    },
-                    "merge": {
-                        "": {
-                            "default": {
-                                "all": ["", "d", "s", "d!", "s!"],
-                                "attributes": {"": ["", "d", "s", "d!", "s!"]}
-                            },
-                            "records": {
-                                "": {
-                                    "all": ["", "d", "s", "d!", "s!"],
-                                    "attributes": {"": ["", "d", "s", "d!", "s!"]}
-                                }
-                            }
-                        }
-                    }
-                }
+                "unchecked": {"": [""]}
             },
             "merge": {
-                "source": "",
+                "tributary": "",
                 "default": {
-                    "all": ["", "d", "s", "d!", "s!"],
-                    "attributes": {"": ["", "d", "s", "d!", "s!"]}
+                    "all": ["", "p", "t", "p!", "t!"],
+                    "attributes": {"": ["", "p", "t", "p!", "t!"]}
                 },
                 "records": {
                     "": {
-                        "all": ["", "d", "s", "d!", "s!"],
-                        "attributes": {"": ["", "d", "s", "d!", "s!"]}
+                        "all": ["", "p", "t", "p!", "t!"],
+                        "attributes": {"": ["", "p", "t", "p!", "t!"]}
                     }
                 }
             }

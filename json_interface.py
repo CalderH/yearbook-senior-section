@@ -1,6 +1,6 @@
 from json import dumps
 from copy import deepcopy
-from typing import Union, Optional, Any, cast
+from typing import Union, Optional, Any, cast, NoReturn, Annotated
 
 
 RawValue = Union[None, int, float, bool, str, list, dict]
@@ -62,7 +62,7 @@ def _recursive_in(e, l: list) -> bool:
     return any(_recursive_in(e, le) for le in l if isinstance(le, list))
 
 
-def _type_check(name: str, data: RawValue, template: RawValue) -> None:
+def _type_check(name: str, data: RawValue, template: RawValue) -> NoReturn:
     """Check if a piece of data matches a template."""
 
     # Null template matches everything
@@ -147,7 +147,7 @@ class JSONDict:
         else:
             return f'{self._type_name}.{name}'
         
-    def _check_name(self, name) -> None:
+    def _check_name(self, name) -> NoReturn:
         """Check whether the template has an attribute with a given name
 
         Returns nothing on success, raises exception on failure.
@@ -156,7 +156,7 @@ class JSONDict:
         if self._template is not None and not self._any_keys and name not in self._template:
             raise AttributeError(f'{self._type_name} has no attribute \'{name}\'')
 
-    def _type_check(self) -> None:
+    def _type_check(self) -> NoReturn:
         """Checks whether each name/value pair matches the template.
         
         Returns nothing on success, raises exception on failure."""
@@ -238,7 +238,7 @@ class JSONDict:
         # When you iterate through the JSONDict, you only want the ones with non-None value
         return {name: value for name, value in self._data if value is not None}
     
-    def __setattr__(self, name: str, value: Value) -> None:
+    def __setattr__(self, name: str, value: Value) -> NoReturn:
         if name in JSONDict.reserved_names:
             return super().__setattr__(name, value)
 
@@ -269,7 +269,7 @@ class JSONDict:
         # Once we've type checked, can actually set the value
         self._data[name] = value
     
-    def __delattr__(self, name: str) -> None:
+    def __delattr__(self, name: str) -> NoReturn:
         name = underscores_to_spaces(name)
         self._check_name(name)
         del self._data[name]
@@ -280,10 +280,10 @@ class JSONDict:
     def __contains__(self, name: str) -> bool:
         return self.__hasattr__(name)
     
-    def __setitem__(self, name: str, value: Value) -> None:
+    def __setitem__(self, name: str, value: Value) -> NoReturn:
         self.__setattr__(name, value)
     
-    def __delitem__(self, name: str) -> None:
+    def __delitem__(self, name: str) -> NoReturn:
         self.__delattr__(name)
     
     def __eq__(self, other: Any) -> bool:
@@ -301,7 +301,7 @@ class JSONDict:
     def copy(self) -> 'JSONDict':
         return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data))
     
-    def print(self) -> None:
+    def print(self) -> NoReturn:
         print(dumps(self._data, indent=4))
 
 
@@ -314,7 +314,7 @@ class JSONList:
 
         self._type_check()
     
-    def _type_check(self) -> None:
+    def _type_check(self) -> NoReturn:
         """Checks whether each item matches the item template.
         
         Returns nothing on success, raises exception on failure.
@@ -356,7 +356,7 @@ class JSONList:
         else:
             return item
     
-    def _type_check_item(self, value: RawValue) -> None:
+    def _type_check_item(self, value: RawValue) -> NoReturn:
         """Check the type of an item or candidate item"""
 
         _type_check(self._item_type_name, value, self._item_template)
@@ -370,16 +370,16 @@ class JSONList:
         except:
             raise Exception('I guess you do actually need to check this?')
     
-    def __setitem__(self, index: int, value: Value) -> None:
+    def __setitem__(self, index: int, value: Value) -> NoReturn:
         if isinstance(value, JSONDict) or isinstance(value, JSONList):
             value = value._data
         self._type_check_item(value)
         self._data[index] = value
     
-    def __delitem__(self, index: int) -> None:
+    def __delitem__(self, index: int) -> NoReturn:
         del self._data[index]
     
-    def append(self, value: RawValue) -> None:
+    def append(self, value: RawValue) -> NoReturn:
         self._type_check_item(value)
         self._data.append(value)
 
