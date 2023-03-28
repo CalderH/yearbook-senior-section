@@ -2,7 +2,8 @@ import json
 from json_interface import *
 from yearbook_setup import core_path
 from id_tools import *
-from typing import Dict, List
+from typing import Dict, List, Tuple
+from enum import Enum
 
 
 Record = Annotated[JSONDict, 'record']
@@ -13,6 +14,12 @@ RecordID = Annotated[ID, 'record']
 VersionID = Annotated[ID, 'version']
 BranchID = Annotated[ID, 'branch']
 ViewID = Annotated[ID, 'view']
+
+
+class VersionType(Enum):
+    change = 0
+    merge = 1
+    select = 2
 
 
 with open(core_path('database template')) as file:
@@ -96,6 +103,18 @@ class Database:
         self.data.next_view_id = next_id(output)
         return output
 
+    def version_type(version: Version) -> Optional[VersionType]:
+        """Returns an enum representing the type of a version, or None if the version has no type"""
+
+        type_dict = {'change': VersionType.change, 'merge': VersionType.merge, 'select': VersionType.select}
+        included_types = [version[version_type] is not None for version_type in type_dict]
+        if len(included_types) > 1:
+            raise YBDBException('Version has multiple types')
+        elif included_types == 0:
+            return None
+        else:
+            return type_dict[included_types[0]]
+
     def branch(self, branch_id: BranchID) -> Branch:
         """Get the branch with a given ID, or error if there is no such branch"""
 
@@ -112,6 +131,13 @@ class Database:
         else:
             raise YBDBException(f'There is no branch with id {version_id}')
     
+    def _make_new_version(self) -> Tuple[VersionID, Version]:
+        "Create a new empty version, and return the verison's ID and version itself"
+
+        id = self._next_version_id()
+        self.data.versions[id] = {}
+        return id, self.data.versions[id]
+    
     def check_well_formed(self):
         # TODO
         pass
@@ -127,13 +153,14 @@ class Database:
         
         current_version_id = branch.end
         current_version = self.version(current_version_id)
-        if current_version.change is not None and current_version.change.unchecked is not None:
+
+        current_version_type = Database.version_type(current_version)
+        if current_version_type != VersionType.change:
+            raise YBDBException('Can only commit to a change version')
+        if current_version.change.unchecked is not None:
             raise YBDBException('Cannot commit a version with unchecked edits')
-        
-        new_version_id = self._next_version_id()
-        
-        self.data.versions[new_version_id] = {}
-        new_version = self.data.versions[new_version_id]
+
+        new_version_id, new_version = self._make_new_version()
         new_version.branch = branch_id
         current_version.next = new_version_id
         new_version.previous = current_version_id
@@ -150,7 +177,11 @@ class Database:
         branch = self.branch(branch_id)
         version = self.version(branch.end)
 
-        if 'change' not in version:
+        version_type = Database.version_type(version)
+        if version_type not in [VersionType.change, None]:
+            raise YBDBException('Cannot make edits to a merge or select version')
+
+        if version.change is None:
             # If the open version has not had any edits yet, need to mark that this version is a change rather than a merge
             version.change = {}
         version.change.deltas = deltas
@@ -163,15 +194,16 @@ class Database:
         """Creates a new branch starting at a given version."""
 
         start_version = self.version(version_id)
+        if start_version.next is None:
+            raise YBDBException('Cannot make a branch from an open version')
+
         new_branch_id = self._next_branch_id()
         self.data.branches[new_branch_id] = {}
         new_branch = self.branch(new_branch_id)
         new_branch.name = branch_name
         new_branch.parent = start_version.branch
 
-        new_version_id = self._next_version_id()
-        self.data.versions[new_version_id] = {}
-        new_version = self.version(new_version_id)
+        new_version_id, new_version = self._make_new_version()
         new_version.previous = version_id
         new_version.branch = new_branch_id
 
@@ -191,10 +223,15 @@ class Database:
         current_version_id = primary_branch.end
         current_version = self.version(current_version_id)
 
-        if current_version.change is not None:
+        current_version_type = Database.version_type(current_version)
+        if current_version_type == VersionType.change:
             raise YBDBException('Cannot merge to a branch with uncommitted changes')
+        if current_version_type == VersionType.select:
+            raise YBDBException('Cannot merge to a selection')
+        assert(current_version_type is None)
         
-        self.version(tributary_version_id)
+        tributary = self.version(tributary_version_id)
+        tributary.merged_to.append(current_version_id)
 
         current_version.merge = {}
         merge = current_version.merge
@@ -202,4 +239,37 @@ class Database:
         merge.default = default_instructions
         merge.records = record_instructions
 
+        new_version_id, new_version = self._make_new_version()
+        current_version.next = new_version_id
+        new_version.previous = current_version
+        new_version.branch = primary_branch_id
+
         self.save()
+
+    def create_selection(self, output_id: VersionID, primary: Optional[bool] = True) -> NoReturn:
+        """Creates a new selection version before a given version.
+        
+        output_id: the version that the selection will go into
+        if that version is a merge, use the primary field to indicate whether this selection selects the primary input (True) or the tributary input (False)
+        """
+
+        output_version = self.version(output_id)
+
+        if output_version.merge and not primary:
+            input_id = output_version.merge.tributary
+        else:
+            input_id = output_version.previous
+        input_version = self.version(input_id)
+
+        selection_id, selection_version = self._make_new_version()
+
+        input_version.next = selection_id
+        output_version.previous = selection_id
+        selection_version.prev = input_id
+        selection_version.next = output_id
+
+        selection_version.select.selection = input_id
+        selection_version.select.original = input_id
+
+    def change_selection(self, version_id: VersionID, new_selection: ID) -> NoReturn:
+        pass
