@@ -42,7 +42,7 @@
             "merged to": [""],
             "change": {
                 "deltas": {"": {}},
-                "selections": {"": ""},
+                "revisions": {"": ""},
                 "unchecked": {"": [""]}
             },
             "merge": {
@@ -58,8 +58,9 @@
                     }
                 }
             },
-            "select": {
-                "selection": ""
+            "revision": {
+                "current": "",
+                "original": ""
             }
         }
     }

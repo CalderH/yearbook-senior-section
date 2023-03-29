@@ -19,7 +19,7 @@ ViewID = Annotated[ID, 'view']
 class VersionType(Enum):
     change = 0
     merge = 1
-    select = 2
+    revision = 2
 
 
 with open(core_path('database template')) as file:
@@ -106,7 +106,7 @@ class Database:
     def version_type(version: Version) -> Optional[VersionType]:
         """Returns an enum representing the type of a version, or None if the version has no type"""
 
-        type_dict = {'change': VersionType.change, 'merge': VersionType.merge, 'select': VersionType.select}
+        type_dict = {'change': VersionType.change, 'merge': VersionType.merge, 'revision': VersionType.revision}
         included_types = [version[version_type] is not None for version_type in type_dict]
         if len(included_types) > 1:
             raise YBDBException('Version has multiple types')
@@ -137,11 +137,61 @@ class Database:
         id = self._next_version_id()
         self.data.versions[id] = {}
         return id, self.data.versions[id]
+
+    def is_open(version: Version) -> bool:
+        return version.next is None
     
     def check_well_formed(self):
         # TODO
         pass
+
+    def _ancestry(self, version_id: VersionID) -> List[VersionID]:
+        ancestors = []
+        edge = [(version_id, {})]
+
+        open_version = Database.is_open(self.version(version_id))
+
+        while edge != []:
+            new_edge = []
+            for edge_version_id, revisions in edge:
+                if edge_version_id not in ancestors:
+                    ancestors.append(edge_version_id)
+
+                edge_version = self.version(edge_version_id)
+                edge_version_type = Database.version_type(edge_version)
+                
+                if edge_version_type == VersionType.revision:
+                    if open_version:
+                        new_edge.append((edge_version.revision.current, revisions))
+                    elif edge_version_id in revisions:
+                        new_edge.append((revisions[edge_version_id], revisions))
+                    else:
+                        new_edge.append((edge_version.revision.original, revisions))
+                else:
+                    previous_id = edge_version.previous
+                    if previous_id is not None:
+                        for revision_id, choice in edge_version.change.revisions:
+                            if revision_id not in revisions:
+                                revisions[revision_id] = choice
+                        new_edge.append((previous_id, revisions))
+                    
+                    if edge_version_type == VersionType.merge:
+                        new_edge.append((edge_version.merge.tributary, revisions.copy()))
+        
+        assert(self.data.root in ancestors)
+        return ancestors
     
+    def _find_LCA(self, v1_id: VersionID, v2_id: VersionID) -> VersionID:
+        """Finds the latest common ancestor of two versions."""
+
+        v1_ancestors = self._ancestry(v1_id)
+        v2_ancestors = self._ancestry(v2_id)
+        for ancestor_id in v1_ancestors:
+            if ancestor_id in v2_ancestors:
+                return ancestor_id
+        
+        raise YBDBException(f'Unable to find LCA of {v1_id} and {v2_id}')
+
     def commit(self, branch_id: BranchID) -> NoReturn:
         """Commit the changes that have been made to a branch.
         
@@ -159,6 +209,14 @@ class Database:
             raise YBDBException('Can only commit to a change version')
         if current_version.change.unchecked is not None:
             raise YBDBException('Cannot commit a version with unchecked edits')
+        
+        revisions = {}
+        ancestry = self._ancestry(current_version_id)
+        for ancestor_id in ancestry:
+            ancestor = self._version(ancestor_id)
+            if Database.version_type(ancestor) == VersionType.revision:
+                revisions[ancestor_id] = ancestor.current
+        current_version.revisions = revisions
 
         new_version_id, new_version = self._make_new_version()
         new_version.branch = branch_id
@@ -179,7 +237,7 @@ class Database:
 
         version_type = Database.version_type(version)
         if version_type not in [VersionType.change, None]:
-            raise YBDBException('Cannot make edits to a merge or select version')
+            raise YBDBException('Cannot make edits to a merge or revision version')
 
         if version.change is None:
             # If the open version has not had any edits yet, need to mark that this version is a change rather than a merge
@@ -194,7 +252,7 @@ class Database:
         """Creates a new branch starting at a given version."""
 
         start_version = self.version(version_id)
-        if start_version.next is None:
+        if Database.is_open(start_version):
             raise YBDBException('Cannot make a branch from an open version')
 
         new_branch_id = self._next_branch_id()
@@ -226,8 +284,8 @@ class Database:
         current_version_type = Database.version_type(current_version)
         if current_version_type == VersionType.change:
             raise YBDBException('Cannot merge to a branch with uncommitted changes')
-        if current_version_type == VersionType.select:
-            raise YBDBException('Cannot merge to a selection')
+        if current_version_type == VersionType.revision:
+            raise YBDBException('Cannot merge to a revision')
         assert(current_version_type is None)
         
         tributary = self.version(tributary_version_id)
@@ -246,11 +304,11 @@ class Database:
 
         self.save()
 
-    def create_selection(self, output_id: VersionID, primary: Optional[bool] = True) -> NoReturn:
-        """Creates a new selection version before a given version.
+    def create_revision(self, output_id: VersionID, primary: Optional[bool] = True) -> NoReturn:
+        """Creates a new revision version before a given version.
         
-        output_id: the version that the selection will go into
-        if that version is a merge, use the primary field to indicate whether this selection selects the primary input (True) or the tributary input (False)
+        output_id: the version that the revision will go into
+        if that version is a merge, use the primary field to indicate whether this revision affects the primary input (True) or the tributary input (False)
         """
 
         output_version = self.version(output_id)
@@ -261,15 +319,24 @@ class Database:
             input_id = output_version.previous
         input_version = self.version(input_id)
 
-        selection_id, selection_version = self._make_new_version()
+        revision_id, revision_version = self._make_new_version()
 
-        input_version.next = selection_id
-        output_version.previous = selection_id
-        selection_version.prev = input_id
-        selection_version.next = output_id
+        input_version.next = revision_id
+        output_version.previous = revision_id
+        revision_version.prev = input_id
+        revision_version.next = output_id
 
-        selection_version.select.selection = input_id
-        selection_version.select.original = input_id
+        revision_version.revision.current = input_id
+        revision_version.revision.original = input_id
 
-    def change_selection(self, version_id: VersionID, new_selection: ID) -> NoReturn:
-        pass
+    def change_revision(self, revision_id: VersionID, new_id: ID) -> NoReturn:
+        if decompose_id(new_id)[1] == IDType.branch:
+            new_version_id = self.branch(new_id).end
+        else:
+            new_version_id = new_id
+        
+        if revision_id in self._ancestors(new_version_id):
+            raise YBDBException('Cannot make a revision select a version downstream of the revision')
+        
+        revision = self.version(revision_id)
+        revision.current = new_id
