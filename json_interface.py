@@ -1,6 +1,6 @@
 from json import dumps
 from copy import deepcopy
-from typing import Union, Optional, Any, cast, NoReturn, Annotated
+from typing import Union, Optional, Any, cast, Annotated
 
 
 RawValue = Union[None, int, float, bool, str, list, dict]
@@ -62,7 +62,7 @@ def _recursive_in(e, l: list) -> bool:
     return any(_recursive_in(e, le) for le in l if isinstance(le, list))
 
 
-def _type_check(name: str, data: RawValue, template: RawValue) -> NoReturn:
+def _type_check(name: str, data: RawValue, template: RawValue) -> None:
     """Check if a piece of data matches a template."""
 
     # Null template matches everything
@@ -114,13 +114,13 @@ def _type_check(name: str, data: RawValue, template: RawValue) -> NoReturn:
         
         if data_type_name == 'dict':
             template = cast(dict, template)
-            data = cast(dict, template)
+            data = cast(dict, data)
             # Creating the dict will cause it to type-check itself
             JSONDict(name, template, data)
 
         elif data_type_name == 'list':
             template = cast(list, template)
-            data = cast(list, template)
+            data = cast(list, data)
             # Creating the list will cause it to type-check itself
             JSONList(name, template[0], data)
 
@@ -147,7 +147,7 @@ class JSONDict:
         else:
             return f'{self._type_name}.{name}'
         
-    def _check_name(self, name) -> NoReturn:
+    def _check_name(self, name) -> None:
         """Check whether the template has an attribute with a given name
 
         Returns nothing on success, raises exception on failure.
@@ -156,13 +156,13 @@ class JSONDict:
         if self._template is not None and not self._any_keys and name not in self._template:
             raise AttributeError(f'{self._type_name} has no attribute \'{name}\'')
 
-    def _type_check(self) -> NoReturn:
+    def _type_check(self) -> None:
         """Checks whether each name/value pair matches the template.
         
         Returns nothing on success, raises exception on failure."""
 
         # Null template matches everything
-        if self._template is None:
+        if self._template is None or self._template == {}:
             return
         
         template_value = None
@@ -234,11 +234,23 @@ class JSONDict:
     def __hasattr__(self, name: str) -> bool:
         return name in self._data and self._data[name] is not None
     
-    def __iter__(self) -> dict:
-        # When you iterate through the JSONDict, you only want the ones with non-None value
+    def _iter_dict(self):
         return {name: value for name, value in self._data if value is not None}
+
+    def __iter__(self):
+        # When you iterate through the JSONDict, you only want the ones with non-None value
+        return iter(self._iter_dict())
     
-    def __setattr__(self, name: str, value: Value) -> NoReturn:
+    def items(self):
+        return self._iter_dict().items()
+    
+    def keys(self):
+        return self._iter_dict().keys()
+    
+    def values(self):
+        return self._iter_dict().values()
+    
+    def __setattr__(self, name: str, value: Value) -> None:
         if name in JSONDict.reserved_names:
             return super().__setattr__(name, value)
 
@@ -269,7 +281,7 @@ class JSONDict:
         # Once we've type checked, can actually set the value
         self._data[name] = value
     
-    def __delattr__(self, name: str) -> NoReturn:
+    def __delattr__(self, name: str) -> None:
         name = underscores_to_spaces(name)
         self._check_name(name)
         del self._data[name]
@@ -280,10 +292,10 @@ class JSONDict:
     def __contains__(self, name: str) -> bool:
         return self.__hasattr__(name)
     
-    def __setitem__(self, name: str, value: Value) -> NoReturn:
+    def __setitem__(self, name: str, value: Value) -> None:
         self.__setattr__(name, value)
     
-    def __delitem__(self, name: str) -> NoReturn:
+    def __delitem__(self, name: str) -> None:
         self.__delattr__(name)
     
     def __eq__(self, other: Any) -> bool:
@@ -301,7 +313,7 @@ class JSONDict:
     def copy(self) -> 'JSONDict':
         return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data))
     
-    def print(self) -> NoReturn:
+    def print(self) -> None:
         print(dumps(self._data, indent=4))
 
 
@@ -314,7 +326,7 @@ class JSONList:
 
         self._type_check()
     
-    def _type_check(self) -> NoReturn:
+    def _type_check(self) -> None:
         """Checks whether each item matches the item template.
         
         Returns nothing on success, raises exception on failure.
@@ -356,7 +368,7 @@ class JSONList:
         else:
             return item
     
-    def _type_check_item(self, value: RawValue) -> NoReturn:
+    def _type_check_item(self, value: RawValue) -> None:
         """Check the type of an item or candidate item"""
 
         _type_check(self._item_type_name, value, self._item_template)
@@ -370,16 +382,16 @@ class JSONList:
         except:
             raise Exception('I guess you do actually need to check this?')
     
-    def __setitem__(self, index: int, value: Value) -> NoReturn:
+    def __setitem__(self, index: int, value: Value) -> None:
         if isinstance(value, JSONDict) or isinstance(value, JSONList):
             value = value._data
         self._type_check_item(value)
         self._data[index] = value
     
-    def __delitem__(self, index: int) -> NoReturn:
+    def __delitem__(self, index: int) -> None:
         del self._data[index]
     
-    def append(self, value: RawValue) -> NoReturn:
+    def append(self, value: RawValue) -> None:
         self._type_check_item(value)
         self._data.append(value)
 
@@ -394,6 +406,9 @@ class JSONList:
     
     def __str__(self) -> str:
         return self.__repr__()
+    
+    def __iter__(self):
+        return iter(self.data)
     
     def copy(self) -> 'JSONList':
         return JSONList(self._type_name, deepcopy(self._item_template), deepcopy(self._data))

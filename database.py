@@ -31,29 +31,41 @@ class YBDBException(Exception):
 
 
 class Database:
-    def __init__(self, path: str):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         self.path = path
-        self.data = None
+
+        if data is None:
+            if path is None:
+                self.data = JSONDict('database', database_template, {})
+                self.setup()
+            else:
+                self.data = None
+        else:
+            self.data = JSONDict('database', database_template, data)
     
-    def load(self) -> NoReturn:
+    def load(self) -> None:
         """Load the data from the JSON file
         
-        Anytime you create a Database object, you must next call eiter load or setup.
+        Anytime you create a Database object based on a file, you must next call eiter load or setup.
         """
 
+        if self.path is None:
+            return
         with open(self.path) as file:
             self.data = JSONDict('database', database_template, json.load(file))
     
-    def save(self) -> NoReturn:
+    def save(self) -> None:
         """Save this object's data to the JSON file"""
 
+        if self.path is None:
+            return
         with open(self.path, 'w') as file:
             json.dump(self.data._data, file, indent=4)
     
-    def setup(self) -> NoReturn:
+    def setup(self) -> None:
         """Create all the fields of an initial, empty database
         
-        Anytime you create a Database object, you must next call eiter load or setup.
+        Anytime you create a Database object based on a file, you must next call eiter load or setup.
         """
 
         self.data = JSONDict('database', database_template, {})
@@ -107,10 +119,10 @@ class Database:
         """Returns an enum representing the type of a version, or None if the version has no type"""
 
         type_dict = {'change': VersionType.change, 'merge': VersionType.merge, 'revision': VersionType.revision}
-        included_types = [version[version_type] is not None for version_type in type_dict]
+        included_types = [version_type for version_type in type_dict if version[version_type] is not None]
         if len(included_types) > 1:
             raise YBDBException('Version has multiple types')
-        elif included_types == 0:
+        elif included_types == []:
             return None
         else:
             return type_dict[included_types[0]]
@@ -153,6 +165,7 @@ class Database:
 
         while edge != []:
             new_edge = []
+
             for edge_version_id, revisions in edge:
                 if edge_version_id not in ancestors:
                     ancestors.append(edge_version_id)
@@ -167,17 +180,21 @@ class Database:
                         new_edge.append((revisions[edge_version_id], revisions))
                     else:
                         new_edge.append((edge_version.revision.original, revisions))
-                else:
+                elif edge_version.previous is not None:
                     previous_id = edge_version.previous
-                    if previous_id is not None:
-                        for revision_id, choice in edge_version.change.revisions:
+
+                    if edge_version_type == VersionType.change and edge_version.change.revisions is not None:
+                        for revision_id, choice in edge_version.change.revisions.items():
                             if revision_id not in revisions:
                                 revisions[revision_id] = choice
-                        new_edge.append((previous_id, revisions))
+                    
+                    new_edge.append((previous_id, revisions))
                     
                     if edge_version_type == VersionType.merge:
                         new_edge.append((edge_version.merge.tributary, revisions.copy()))
-        
+
+            edge = new_edge
+
         assert(self.data.root in ancestors)
         return ancestors
     
@@ -192,7 +209,7 @@ class Database:
         
         raise YBDBException(f'Unable to find LCA of {v1_id} and {v2_id}')
 
-    def commit(self, branch_id: BranchID) -> NoReturn:
+    def commit(self, branch_id: BranchID) -> None:
         """Commit the changes that have been made to a branch.
         
         This creates a new blank version at the end of the branch, so the previous end version cannot be edited anymore.
@@ -213,11 +230,11 @@ class Database:
         revisions = {}
         ancestry = self._ancestry(current_version_id)
         for ancestor_id in ancestry:
-            ancestor = self._version(ancestor_id)
+            ancestor = self.version(ancestor_id)
             if Database.version_type(ancestor) == VersionType.revision:
                 revisions[ancestor_id] = ancestor.current
-        current_version.revisions = revisions
-
+        current_version.change.revisions = revisions
+        
         new_version_id, new_version = self._make_new_version()
         new_version.branch = branch_id
         current_version.next = new_version_id
@@ -226,7 +243,7 @@ class Database:
 
         self.save()
     
-    def change_open_version(self, branch_id: BranchID, deltas: Record, unchecked: Optional[Dict[RecordID, List[str]]] = None) -> NoReturn:
+    def change_open_version(self, branch_id: BranchID, deltas: Record, unchecked: Optional[Dict[RecordID, List[str]]] = None) -> None:
         """Incorporates edits to the version at the end of a branch.
         
         This *replaces* the previous deltas with new deltas, rather than adding onto the previous deltas.
@@ -248,7 +265,7 @@ class Database:
 
         self.save()
 
-    def new_branch(self, version_id: VersionID, branch_name: str) -> NoReturn:
+    def new_branch(self, version_id: VersionID, branch_name: str) -> None:
         """Creates a new branch starting at a given version."""
 
         start_version = self.version(version_id)
@@ -304,7 +321,7 @@ class Database:
 
         self.save()
 
-    def create_revision(self, output_id: VersionID, primary: Optional[bool] = True) -> NoReturn:
+    def create_revision(self, output_id: VersionID, primary: Optional[bool] = True) -> None:
         """Creates a new revision version before a given version.
         
         output_id: the version that the revision will go into
@@ -329,7 +346,7 @@ class Database:
         revision_version.revision.current = input_id
         revision_version.revision.original = input_id
 
-    def change_revision(self, revision_id: VersionID, new_id: ID) -> NoReturn:
+    def change_revision(self, revision_id: VersionID, new_id: ID) -> None:
         if decompose_id(new_id)[1] == IDType.branch:
             new_version_id = self.branch(new_id).end
         else:
