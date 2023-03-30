@@ -12,20 +12,22 @@ db.update('b,ba', {})
 db.commit('b,ba')
 db.update('b,ba', {})
 db.commit('b,ba')
+db.update('b,be', {})
+db.commit('b,be')
 db.setup_revision('v,bo')
-db.revise('v,ca', 'b,be')
+db.revise('v,ce', 'b,be')
 db.update('b,ba', {})
 db.commit('b,ba')
-db.revise('v,ca', 'v,ba')
+db.revise('v,ce', 'v,ba')
 db.update('b,ba', {})
 db.commit('b,ba')
 
 db.data.print()
 
 print('--------------------')
-print(db._ancestry('v,bo'))
-print(db._ancestry('v,bu'))
-print(db._ancestry('v,ce'))
+print(db._revision_state('v,bo'))
+print(db._revision_state('v,bu'))
+print(db._revision_state('v,ci'))
 
 
 # TODO can I make a branch from an open version
