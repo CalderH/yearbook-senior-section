@@ -56,7 +56,8 @@
                         "all": ["", "p", "t", "p!", "t!"],
                         "attributes": {"": ["", "p", "t", "p!", "t!"]}
                     }
-                }
+                },
+                "revisions": {"": ""},
             },
             "revision": {
                 "current": "",

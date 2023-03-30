@@ -1,6 +1,6 @@
 from json import dumps
 from copy import deepcopy
-from typing import Union, Optional, Any, cast, Annotated
+from typing import Union, Optional, Any, cast
 
 
 RawValue = Union[None, int, float, bool, str, list, dict]
@@ -235,7 +235,7 @@ class JSONDict:
         return name in self._data and self._data[name] is not None
     
     def _iter_dict(self):
-        return {name: value for name, value in self._data if value is not None}
+        return {name: value for name, value in self._data.items() if value is not None}
 
     def __iter__(self):
         # When you iterate through the JSONDict, you only want the ones with non-None value
