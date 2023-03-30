@@ -73,4 +73,7 @@ def decompose_id(id: str) -> Tuple[str, Optional[IDType]]:
     else:
         return id, None
 
-__all__ = ['start_id', 'next_id', 'IDType', 'convert_id', 'decompose_id', 'ID']
+def id_type(id: str) -> Optional[IDType]:
+    return decompose_id(id)[1]
+
+__all__ = ['start_id', 'next_id', 'IDType', 'convert_id', 'decompose_id', 'id_type', 'ID']

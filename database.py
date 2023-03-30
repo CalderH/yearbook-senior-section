@@ -144,7 +144,7 @@ class Database:
             raise YBDBException(f'There is no version with id {version_id}')
     
     def _to_version_id(self, id: ID, allow_open = True) -> VersionID:
-        is_branch = decompose_id(id)[1] == IDType.branch
+        is_branch = id_type(id) == IDType.branch
 
         if is_branch:
             version_id = self._get_branch(id).end
@@ -176,16 +176,17 @@ class Database:
         # TODO
         pass
 
-    def _ancestry(self, version_id: VersionID, include_revisions=False) -> List[VersionID]:
+    def _trace_back(self, version_id: VersionID, include_revisions=False) -> Tuple[List[VersionID], Dict[VersionID, VersionID]]:
         ancestors = []
-        edge = [(version_id, {})]
+        edge = [version_id]
+        revisions: Dict[VersionID, VersionID] = {}
 
         open_version = Database._is_open(self._get_version(version_id))
 
         while edge != []:
             new_edge = []
 
-            for edge_version_id, revisions in edge:
+            for edge_version_id in edge:
                 edge_version = self._get_version(edge_version_id)
                 edge_version_type = Database._version_type(edge_version)
                 
@@ -193,38 +194,49 @@ class Database:
                     if include_revisions and edge_version_id not in ancestors:
                         ancestors.append(edge_version_id)
 
-                    if open_version:
-                        selection = edge_version.revision.current
-                    elif edge_version_id in revisions:
+                    if edge_version_id in revisions:
                         selection = revisions[edge_version_id]
                     else:
-                        selection = edge_version.revision.original
+                        if open_version:
+                            selection = self._to_version_id(edge_version.revision.current, allow_open=False)
+                        else:
+                            selection = edge_version.revision.original
 
-                    if decompose_id(selection)[1] == IDType.branch:
-                        selection = self._get_branch(selection).end
+                        revisions[edge_version_id] = selection
 
-                    new_edge.append((selection, revisions))
+                    new_edge.append(selection)
                 else:
                     if edge_version_id not in ancestors:
                         ancestors.append(edge_version_id)
 
                     if edge_version.previous is not None:                    
                         previous_id = edge_version.previous
+                        new_edge.append(previous_id)
 
-                        if edge_version_type == VersionType.change and edge_version.change.revisions is not None:
-                            for revision_id, choice in edge_version.change.revisions.items():
-                                if revision_id not in revisions:
-                                    revisions[revision_id] = choice
-                        
-                        new_edge.append((previous_id, revisions))
-                        
                         if edge_version_type == VersionType.merge:
-                            new_edge.append((edge_version.merge.tributary, revisions.copy()))
+                            new_edge.append(edge_version.merge.tributary)
+
+                        if edge_version_type == VersionType.change:
+                            edge_version_revision_changes = edge_version.change.revision_changes
+                        else:
+                            assert edge_version_type == VersionType.merge
+                            edge_version_revision_changes = edge_version.merge.revision_changes
+                        
+                        if edge_version_revision_changes is not None:
+                            for revision_id, selection in edge_version_revision_changes.items():
+                                if revision_id not in revisions:
+                                    revisions[revision_id] = selection
 
             edge = new_edge
 
         assert(self.data.root in ancestors)
-        return ancestors
+        return ancestors, revisions
+
+    def _ancestry(self, version_id: VersionID, include_revisions=False) -> List[VersionID]:
+        return self._trace_back(version_id, include_revisions=include_revisions)[0]
+
+    def _revision_state(self, version_id: VersionID) -> Dict[VersionID, VersionID]:
+        return self._trace_back(version_id)[1]
     
     def _find_LCA(self, v1_id: VersionID, v2_id: VersionID) -> VersionID:
         """Finds the latest common ancestor of two versions."""
@@ -236,14 +248,6 @@ class Database:
                 return ancestor_id
         
         raise YBDBException(f'Unable to find LCA of {v1_id} and {v2_id}')
-
-    def _get_revision_choices(self, version_id: VersionID) -> Dict[VersionID, ID]:
-        ancestry = self._ancestry(version_id, include_revisions=True)
-        revisions = {}
-        for ancestor_id in ancestry:
-            ancestor = self._get_version(ancestor_id)
-            if Database._version_type(ancestor) == VersionType.revision:
-                revisions[ancestor_id] = self._to_version_id(ancestor.revision.current, allow_open=False)
 
     def commit(self, branch_id: BranchID) -> None:
         """Commit the changes that have been made to a branch.
@@ -258,18 +262,31 @@ class Database:
         current_version = self._get_version(current_version_id)
 
         current_version_type = Database._version_type(current_version)
-        if current_version_type != VersionType.change:
-            raise YBDBException('Can only commit to a change version')
-        if current_version.change.unchecked is not None:
+        assert(current_version_type in [VersionType.change, None])
+
+        if current_version_type == VersionType.change and current_version.change.unchecked is not None:
             raise YBDBException('Cannot commit a version with unchecked edits')
+
+        if current_version.previous is not None:
+            revisions = self._revision_state(current_version_id)
+            previous_revisions = self._revision_state(current_version.previous)
+            revisions_have_changed = revisions != previous_revisions
+        else:
+            revisions_have_changed = False
+
+        if not(current_version_type == VersionType.change or revisions_have_changed):
+            # If nothing has changed, don't create a new version
+            return
         
-        revisions = {}
-        ancestry = self._ancestry(current_version_id, include_revisions=True)
-        for ancestor_id in ancestry:
-            ancestor = self._get_version(ancestor_id)
-            if Database._version_type(ancestor) == VersionType.revision:
-                revisions[ancestor_id] = self._to_version_id(ancestor.revision.current, allow_open=False)
-        current_version.change.revisions = revisions
+        if current_version_type is None and revisions_have_changed:
+            current_version.change = {}
+        
+        if revisions_have_changed:
+            revision_changes = {}
+            for revision_id in revisions:
+                if revision_id not in previous_revisions or revisions[revision_id] != previous_revisions[revision_id]:
+                    revision_changes = revisions[revision_id]
+            current_version.change.revision_changes = revision_changes
         
         new_version_id, new_version = self._make_new_version()
         new_version.branch = branch_id
@@ -331,35 +348,49 @@ class Database:
         """Merges a given version into the end of a given branch."""
         
         primary_branch = self._get_branch(primary_branch_id)
-        current_version_id = primary_branch.end
-        current_version = self._get_version(current_version_id)
+        merge_version_id = primary_branch.end
+        merge_version = self._get_version(merge_version_id)
 
-        current_version_type = Database._version_type(current_version)
-        if current_version_type == VersionType.change:
+        merge_version_type = Database._version_type(merge_version)
+        assert(merge_version_type in [VersionType.change, None])
+        if merge_version_type is not None:
             raise YBDBException('Cannot merge to a branch with uncommitted changes')
-        if current_version_type == VersionType.revision:
-            raise YBDBException('Cannot merge to a revision')
-        assert(current_version_type is None)
+        
+        assert(merge_version.previous is not None)
+        primary_version_id = merge_version.previous
 
-        tributary = self._get_version(tributary_version_id)
-        if Database._is_open(tributary):
-            raise YBDBException('Cannot merge an open version')
+        tributary_version = self._get_version(tributary_version_id)
+        if Database._is_open(tributary_version):
+            raise YBDBException('Cannot merge a version with uncommitted changes')
+
+        primary_revision_state = self._revision_state(primary_version_id)
+        tributary_revision_state = self._revision_state(tributary_version_id)
+        merge_revision_state = self._revision_state(merge_version_id)
+
+        revision_changes = {}
+        for revision_id, current_selection in merge_revision_state.items():
+            if    (revision_id not in primary_revision_state and revision_id not in tributary_revision_state) \
+               or revision_id in primary_revision_state and current_selection != primary_revision_state[revision_id] \
+               or revision_id in tributary_revision_state and current_selection != tributary_revision_state[revision_id]:
+                revision_changes[revision_id] = current_selection
+
+        merge_version.merge = {}
+        merge_info = merge_version.merge
+        merge_info.tributary = tributary_version_id
+        merge_info.default = default_instructions
+        merge_info.records = record_instructions
+        if revision_changes != {}:
+            merge_info.revision_changes = revision_changes
+
+        if tributary_version.merged_to is None:
+            tributary_version.merged_to = []
+        tributary_version.merged_to.append(merge_version_id)
 
         new_version_id, new_version = self._make_new_version()
-        
-        if tributary.merged_to is None:
-            tributary.merged_to = []
-        tributary.merged_to.append(new_version_id)
-
-        new_version.merge = {}
-        merge = new_version.merge
-        merge.tributary = tributary_version_id
-        merge.default = default_instructions
-        merge.records = record_instructions
-
-        current_version.next = new_version_id
-        new_version.previous = current_version_id
+        merge_version.next = new_version_id
+        new_version.previous = merge_version_id
         new_version.branch = primary_branch_id
+        primary_branch.end = new_version_id
 
         self.save()
 
