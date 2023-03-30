@@ -31,6 +31,21 @@ class TestDB(unittest.TestCase):
         self.assertEqual(db._ancestry('v,bo'), ['v,bo', 'v,be', 'v,ba'])
         self.assertEqual(db._ancestry('v,bu'), ['v,bu', 'v,bo', 'v,bi', 'v,ba'])
         self.assertEqual(db._ancestry('v,ci'), ['v,ci', 'v,bu', 'v,bo', 'v,ba'])
+    
+    def test_merge(self):
+        db = Database()
+        db.setup()
+
+        db.update('b,ba', {})
+        db.commit('b,ba')
+        db.new_branch('v,ba', 'branch 2')
+        db.update('b,ba', {})
+        db.commit('b,ba')
+        db.update('b,be', {})
+        db.commit('b,be')
+        db.merge('b,ba', 'v,bi', {}, {})
+
+        self.assertEqual(db._ancestry('v,ca'), ['v,ca', 'v,bo', 'v,be', 'v,bi', 'v,ba'])
 
 
 if __name__ == '__main__':

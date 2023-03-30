@@ -249,7 +249,13 @@ class Database:
         
         raise YBDBException(f'Unable to find LCA of {v1_id} and {v2_id}')
 
-    def commit(self, branch_id: BranchID) -> None:
+    def root(self) -> VersionID:
+        return self.data.root
+    
+    def main_branch(self) -> BranchID:
+        return self._get_version(self.data.root).branch
+
+    def commit(self, branch_id: BranchID) -> VersionID:
         """Commit the changes that have been made to a branch.
         
         This creates a new blank version at the end of the branch, so the previous end version cannot be edited anymore.
@@ -297,6 +303,7 @@ class Database:
         branch.end = new_version_id
 
         self.save()
+        return current_version_id
     
     def update(self, branch_id: BranchID, deltas: Record, unchecked: Optional[Dict[RecordID, List[str]]] = None) -> None:
         """Incorporates edits to the version at the end of a branch.
@@ -319,7 +326,7 @@ class Database:
 
         self.save()
 
-    def new_branch(self, version_id: VersionID, branch_name: str) -> None:
+    def new_branch(self, version_id: VersionID, branch_name: str) -> BranchID:
         """Creates a new branch starting at a given version."""
 
         start_version = self._get_version(version_id)
@@ -344,9 +351,10 @@ class Database:
         start_version.branches_out.append(new_branch_id)
 
         self.save()
+        return new_branch_id
     
     def merge(self, primary_branch_id: BranchID, tributary_version_id: VersionID,
-                       default_instructions: dict, record_instructions: dict):
+                       default_instructions: dict, record_instructions: dict) -> VersionID:
         """Merges a given version into the end of a given branch."""
         
         primary_branch = self._get_branch(primary_branch_id)
@@ -370,6 +378,9 @@ class Database:
         merge_revision_state = self._revision_state(merge_version_id)
 
         revision_changes = {}
+        print(primary_revision_state)
+        print(tributary_revision_state)
+        print(merge_revision_state)
         for revision_id, current_selection in merge_revision_state.items():
             if    (revision_id not in primary_revision_state and revision_id not in tributary_revision_state) \
                or revision_id in primary_revision_state and current_selection != primary_revision_state[revision_id] \
@@ -395,8 +406,9 @@ class Database:
         primary_branch.end = new_version_id
 
         self.save()
+        return merge_version_id
 
-    def setup_revision(self, output_id: VersionID, primary: bool = True) -> None:
+    def setup_revision(self, output_id: VersionID, primary: bool = True) -> VersionID:
         """Creates a new revision version before a given version.
         
         output_id: the version that the revision will go into
@@ -404,6 +416,8 @@ class Database:
         """
 
         output_version = self._get_version(output_id)
+        if Database._is_open(output_version):
+            raise YBDBException('Cannot create a revision before an uncommitted version')
 
         if output_version.merge and not primary:
             input_id = output_version.merge.tributary
@@ -421,6 +435,9 @@ class Database:
         revision_version.revision = {}
         revision_version.revision.current = input_id
         revision_version.revision.original = input_id
+
+        self.save()
+        return revision_id
 
     def revise(self, revision_id: VersionID, new_id: ID) -> None:
         new_version_id = self._to_version_id(new_id)
