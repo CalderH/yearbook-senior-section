@@ -504,14 +504,15 @@ class Database:
         # Giving these strings names so it's easier to know what I'm writing
         class MergeRule(StrEnum):
             inherit = ''
-            inherit_from_attribute = 'a'
-            inherit_from_record = 'r'
+            inherit_prioritizing_attribute = 'a'
+            inherit_prioritizing_record = 'r'
             primary_if_conflict = 'p'
             tributary_if_conflict = 't'
             primary_always = 'p!'
             tributary_always = 't!'
         MR = MergeRule
         explicit_rules = [MR.primary_if_conflict, MR.tributary_if_conflict, MR.primary_always, MR.tributary_always]
+        inherit_rules = [MR.inherit, MR.inherit_prioritizing_attribute, MR.inherit_prioritizing_record]
 
         # Used for selecting which version to take from
         class MergeChoice(Enum):
@@ -539,7 +540,7 @@ class Database:
                 raise YBDBException('get_choice must take an explicit rule, not an inherited rule')
 
         # Create the output db state
-        result = primary.new()
+        output = primary.new()
 
         # The rules input will be the merge field of a version. Get the subfields for ease of use:
         default_rule = rules.default.all
@@ -553,58 +554,126 @@ class Database:
 
         # Build up the resulting version, record by record
         for record_id in primary.keys() | tributary.keys():
-            # Get the rules for this record. If there are none for this record in particular, use the global ones
-            if record_id in record_rules:
-                this_record_rules = record_rules[record_id]
-                if this_record_rules.all is not None:
-                    record_all_rule = this_record_rules.all
-                else:
-                    record_all_rule = default_rule
-                if this_record_rules.attributes is not None:
-                    record_attribute_rules = this_record_rules.attributes
-                else:
-                    record_attribute_rules = attribute_rules
-            else:
-                record_all_rule = default_rule
-                record_attribute_rules = attribute_rules
-
-            # Which input(s) have made edits to this version since the LCA?
+            # See which input(s) have made edits to this version since the LCA
             primary_edit = record_id in primary_deltas
             tributary_edit = record_id in tributary_deltas
-
-            # And what edits have they made?
-            primary_delta = {}
-            tributary_delta = {}
-            if record_id in primary_deltas:
-                primary_delta = primary_deltas[record_id]
-            if record_id in tributary_deltas:
-                tributary_delta = tributary_deltas[record_id]
             
-            # First deal with the possibility that this version is deleted in one or the other input
-            record_choice = apply_rule(primary_edit, tributary_edit, record_all_rule)
-            if primary_delta == None:
-                # If the primary input has deleted this record
-                if record_choice == MC.tributary:
-                    # If we're choosing the tributary version, then go with that
-                    # Don't need to break it down by attributes because there are none in the primary to compare it to
-                    result[record_id] = tributary[record_id]
-                # If we're choosing the primary version, then don't add anything to the output for this record
-                continue
-            elif tributary_delta == None:
-                # Same logic as above
-                if record_choice == MC.primary:
-                    result[record_id] = primary[record_id]
-                continue
-                
             # Get the values of this record in the inputs
             primary_record = primary[record_id]
             tributary_record = tributary[record_id]
+
+            # First deal with the possibility that this version only exists in one of the two inputs
+            # either because it was there in the LCA and one of the inputs deleted it
+            # or because it was not in the LCA and one of the inputs created it
+
+            # Figure out what rule to use here
+            if record_rules is not None and record_id in record_rules and (r := record_rules[record_id].all) is not None:
+                record_general_rule = r
+            else:
+                record_general_rule = default_rule
+            
+            # Decide what to do based on which inputs have made edits
+            record_choice = apply_rule(primary_edit, tributary_edit, record_general_rule)
+            if primary_record == None:
+                # If this record is not in the primary input
+                if record_choice == MC.tributary:
+                    # If we're choosing the tributary version, then just go with that
+                    # Don't need to break it down by attributes because there are none in the primary to compare it to
+                    output[record_id] = tributary[record_id]
+                # If we're choosing the primary version, then don't add anything to the output for this record
+                continue
+            elif tributary_record == None:
+                # Same logic as above
+                if record_choice == MC.primary:
+                    output[record_id] = primary[record_id]
+                continue
+                
+            # At this point we know that the record is in both inputs, so we actually have to compare the edits
+                
+            # See what edits they have made
+            primary_record_delta = {}
+            tributary_record_delta = {}
+            if record_id in primary_deltas:
+                primary_record_delta = primary_deltas[record_id]
+            if record_id in tributary_deltas:
+                tributary_record_delta = tributary_deltas[record_id]
+                
             # Create the record to be added in the output db
-            new_record = primary_record.new()
+            output_record = primary_record.new()
             
             # Now build up the record, attribute by attribute
-            for attribute in new_record._template:
-                primary_edit = 
+            for attribute in output_record._template:
+                # Get the four rules that are relevant here
+                # default_rule: the default rule for the whole merge
+                # attribute_rule: the default rule for this attribute across all records
+                # record_rule: the default rule for all attributes of this record
+                # record_attribute_rule: the rule for this specific attribute of this record
+
+                if attribute_rules is not None and attribute in attribute_rules:
+                    attribute_rule = attribute_rules[attribute]
+                else:
+                    attribute_rule = MR.inherit
+
+                if record_rules is not None and record_id in record_rules:
+                    this_record_rules = record_rules[record_id]
+
+                    if (r := this_record_rules.all) is not None:
+                        record_rule = r
+                    else:
+                        record_rule = MR.inherit
+                    
+                    if (a := this_record_rules.attributes) is not None and (r := a[attribute]) is not None:
+                        record_attribute_rule = r
+                    else:
+                        record_attribute_rule = MR.inherit
+                
+                # From these four rules, figure out what rule to apply in this case
+                if record_attribute_rule in explicit_rules:
+                    rule = record_attribute_rule
+                else:
+                    if attribute_rule in explicit_rules:
+                        if record_rule in explicit_rules and attribute_rule != record_rule:
+                            if record_attribute_rule == MR.inherit_prioritizing_attribute:
+                                rule = attribute_rule
+                            elif record_attribute_rule == MR.inherit_prioritizing_record:
+                                rule = record_rule
+                            elif inherit_priority == MR.inherit_prioritizing_attribute:
+                                rule = attribute_rule
+                            else:
+                                rule = record_rule
+                        else:
+                            rule = attribute_rule
+                    else:
+                        if record_rule in explicit_rules:
+                            rule = record_rule
+                        else:
+                            rule = default_rule
+                
+                # See which inputs made edits
+                primary_edit = attribute in primary_record_delta
+                tributary_edit = attribute in tributary_record_delta
+
+                # Figure out which to go with
+                record_attribute_choice = apply_rule(primary_edit, tributary_edit, rule)
+                if record_attribute_choice == MC.primary:
+                    output_attribute = primary_record[attribute]
+                else:
+                    output_attribute = tributary_record[attribute]
+                
+                # Set the value in the record
+                if output_attribute is not None:
+                    output_record[attribute] = output_attribute
+
+            output[record_id] = output_record
+        
+        return output
+
+                    
+
+                
+
+
+
 
 
         
