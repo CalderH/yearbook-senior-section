@@ -47,7 +47,7 @@ class Database:
         else:
             self.data = JSONDict('database', database_template, data)
 
-        self.record_template = record_template
+        self.state_template = {"": record_template}
 
         self.root_version_id = None
         self.main_branch_id = None
@@ -512,7 +512,6 @@ class Database:
             tributary_always = 't!'
         MR = MergeRule
         explicit_rules = [MR.primary_if_conflict, MR.tributary_if_conflict, MR.primary_always, MR.tributary_always]
-        inherit_rules = [MR.inherit, MR.inherit_prioritizing_attribute, MR.inherit_prioritizing_record]
 
         # Used for selecting which version to take from
         class MergeChoice(Enum):
@@ -668,39 +667,51 @@ class Database:
         
         return output
 
-                    
-
-                
-
-
-
-
-
-        
-
-        
-
-
-
-    def compute_version(self, version_id: VersionID, records: Optional[List[str]] = None, attributes: Optional[List[str]] = None) -> dict:
+    def compute_state(self, version_id: VersionID) -> DBState:
         version = self._get_version(version_id)
 
         if self._version_type(version) == VersionType.revision:
             raise YBDBException('Cannot compute the state of the database at a revision')
 
-        ancestry, revision_state, graph = self._trace_back(version_id)
-
-        revision_outputs: Dict[VersionID, List[VersionID]] = {}
-        for revision_id, selection_id in revision_state.items():
-            if selection_id not in revision_outputs:
-                revision_outputs[selection_id] = []
-            revision_outputs[selection_id].append(revision_id)
+        graph = self._graph(version_id)
         
-        calculated_versions: Dict[VersionID, Record] = {}
+        calculated_versions: Dict[VersionID, DBState] = {}
         
         while version_id not in calculated_versions:
-            for graph_version_id, parents in graph.items():
-                if graph_version_id == self.root_version_id:
-                    calculated_versions[graph_version_id] = JSONDict('record', self.record_template, {})
-                elif all(parent_id in calculated_versions for parent_id in parents):
-                    pass
+            remaining_graph = graph.copy()
+
+            for ancestor_id, parent_ids in graph.items():
+                if ancestor_id == self.root_version_id:
+                    calculated_versions[ancestor_id] = JSONDict('database state', self.state_template, {})
+                    
+                    del remaining_graph[ancestor_id]
+
+                elif all(parent_id in calculated_versions for parent_id in parent_ids):
+                    ancestor_version = self._get_version(ancestor_id)
+                    ancestor_type = self._version_type(ancestor_version)
+
+                    if ancestor_type == VersionType.change:
+                        assert(ancestor_version.previous == parent_ids[0])
+                        parent_state = calculated_versions[ancestor_version.previous]
+                        calculated_versions[ancestor_id] = add_delta(parent_state, ancestor_version.change.deltas)
+
+                    else:
+                        assert(ancestor_type == VersionType.merge)
+                        primary_id = ancestor_version.previous
+                        tributary_id = ancestor_version.merge.tributary
+                        assert(parent_ids == [primary_id, tributary_id])
+
+                        primary_state = calculated_versions[primary_id]
+                        tributary_state = calculated_versions[tributary_id]
+                        lca_id = self._find_LCA(primary_id, tributary_id)
+                        lca_state = calculated_versions[lca_id]
+                        calculated_versions[ancestor_id] = self._compute_merge(primary_state, tributary_state, lca_state, ancestor_version.merge)
+                    
+                    del remaining_graph[ancestor_id]
+            
+            graph = remaining_graph
+
+        return calculated_versions[version_id]
+                
+
+
