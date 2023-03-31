@@ -165,6 +165,10 @@ class JSONDict:
         if self._template is None or self._template == {}:
             return
         
+        # Everything matches null data
+        if self._data is None:
+            return
+        
         template_value = None
         # If the dict stores the same template of data for arbitrary keys, then get that template
         if self._any_keys:
@@ -313,6 +317,11 @@ class JSONDict:
     def copy(self) -> 'JSONDict':
         return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data))
     
+    def new(self) -> 'JSONDict':
+        """Create a new empty JSONDict with the same type name and template"""
+
+        return JSONDict(self._type_name, deepcopy(self._template), {})
+    
     def print(self) -> None:
         print(dumps(self._data, indent=4))
 
@@ -412,6 +421,11 @@ class JSONList:
     
     def copy(self) -> 'JSONList':
         return JSONList(self._type_name, deepcopy(self._item_template), deepcopy(self._data))
+    
+    def new(self) -> 'JSONList':
+        """Create a new empty JSONList with the same type name and template"""
+
+        return JSONList(self._type_name, deepcopy(self._item_template), [])
     
     def print(self):
         print(dumps(self._data, indent=4))    

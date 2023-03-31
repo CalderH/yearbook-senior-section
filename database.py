@@ -3,12 +3,13 @@ from json_interface import *
 from yearbook_setup import core_path
 from id_tools import *
 from typing import Dict, List, Tuple, NewType
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 Record = NewType('Record', JSONDict)
 Version = NewType('Version', JSONDict)
 Branch = NewType('Branch', JSONDict)
+DBState = NewType('DBState', JSONDict)
 
 RecordID = NewType('RecordID', ID)
 VersionID = NewType('VersionID', ID)
@@ -20,6 +21,7 @@ class VersionType(Enum):
     change = 0
     merge = 1
     revision = 2
+    root = 3
 
 
 with open(core_path('database template')) as file:
@@ -31,7 +33,9 @@ class YBDBException(Exception):
 
 
 class Database:
-    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
+    def __init__(self, path: Optional[str] = None,
+                 data: Optional[dict] = None,
+                 record_template: Optional[dict] = None):
         self.path = path
 
         if data is None:
@@ -42,6 +46,11 @@ class Database:
                 self.data = None
         else:
             self.data = JSONDict('database', database_template, data)
+
+        self.record_template = record_template
+
+        self.root_version_id = None
+        self.main_branch_id = None
     
     def load(self) -> None:
         """Load the data from the JSON file
@@ -70,27 +79,36 @@ class Database:
 
         self.data = JSONDict('database', database_template, {})
 
-        base_version_id = convert_id(start_id, IDType.version)
+        root_version_id = convert_id(start_id, IDType.version)
         main_branch_id = convert_id(start_id, IDType.branch)
 
-        self.data.root = base_version_id
+        self.root_version_id = root_version_id
+        self.main_branch_id = main_branch_id
+
+        self.data.root = root_version_id
         self.data.branches = {main_branch_id: {}}
         main_branch = self.data.branches[main_branch_id]
         main_branch.name = 'main'
-        main_branch.start = base_version_id
-        main_branch.end = base_version_id
+        main_branch.start = root_version_id
         self.data.working_branch = main_branch_id
 
         self.data.views = {}
 
-        self.data.next_version_id = next_id(base_version_id)
+        self.data.next_version_id = next_id(root_version_id)
         self.data.next_branch_id = next_id(main_branch_id)
         self.data.next_view_id = convert_id(start_id, IDType.view)
 
-        self.data.versions = {base_version_id: {}}
-        base_version = self.data.versions[base_version_id]
-        base_version.message = 'Base'
-        base_version.branch = main_branch_id
+        self.data.versions = {root_version_id: {}}
+        root_version = self.data.versions[root_version_id]
+        root_version.message = 'root'
+        root_version.branch = main_branch_id
+        root_version.root = True
+
+        end_version_id, end_version = self._make_new_version()
+        root_version.next = end_version_id
+        end_version.previous = root_version_id
+        end_version.branch = main_branch_id
+        main_branch.end = end_version_id
 
         self.save()
     
@@ -115,10 +133,11 @@ class Database:
         self.data.next_view_id = next_id(output)
         return output
 
+    @staticmethod
     def _version_type(version: Version) -> Optional[VersionType]:
         """Returns an enum representing the type of a version, or None if the version has no type"""
 
-        type_dict = {'change': VersionType.change, 'merge': VersionType.merge, 'revision': VersionType.revision}
+        type_dict = {'change': VersionType.change, 'merge': VersionType.merge, 'revision': VersionType.revision, 'root': VersionType.root}
         included_types = [version_type for version_type in type_dict if version[version_type] is not None]
         if len(included_types) > 1:
             raise YBDBException('Version has multiple types')
@@ -151,7 +170,7 @@ class Database:
         else:
             version_id = id
 
-        if (not allow_open) and Database._is_open(version := self._get_version(version_id)):
+        if (not allow_open) and self._is_open(version := self._get_version(version_id)):
             if is_branch:
                 if version.previous is not None:
                     return version.previous
@@ -169,6 +188,7 @@ class Database:
         self.data.versions[id] = {}
         return id, self.data.versions[id]
 
+    @staticmethod
     def _is_open(version: Version) -> bool:
         return version.next is None
     
@@ -176,19 +196,37 @@ class Database:
         # TODO
         pass
 
-    def _trace_back(self, version_id: VersionID, include_revisions=False) -> Tuple[List[VersionID], Dict[VersionID, VersionID]]:
-        ancestors = []
-        edge = [version_id]
-        revisions: Dict[VersionID, VersionID] = {}
+    def _trace_back(self, version_id: VersionID, include_revisions=False) -> Tuple[List[VersionID], Dict[VersionID, VersionID], Dict[VersionID, List[VersionID]]]:
+        """Traverses backward through the versions to find every version that contributes to the input version.
 
-        open_version = Database._is_open(self._get_version(version_id))
+        Returns 3 things:
+        - ancestors: a list of this version's ancestors
+            - Breadth-first order
+            - For merges, primary input comes before tributary
+            - By default does not include revision versions, but can include them by setting include_revisions to True
+        - revisions: a dict indicating which selection is made for each revision in the ancestry
+        - graph: a dict representing the relationships among the ancestors
+            - Each version is mapped to a list containing its direct parents:
+                - Root: empty list
+                - Change: the one previous version
+                - Merge: the primary and tributary inputs
+            - By default does not include revision versions, but can include them by setting include_revisions to True
+        """
+
+        ancestors: List[VersionID] = []
+        revisions: Dict[VersionID, VersionID] = {}
+        graph: Dict[VersionID, List[VersionID]] = {}
+
+        edge: List[VersionID] = [version_id]
+
+        open_version = self._is_open(self._get_version(version_id))
 
         while edge != []:
             new_edge = []
 
             for edge_version_id in edge:
                 edge_version = self._get_version(edge_version_id)
-                edge_version_type = Database._version_type(edge_version)
+                edge_version_type = self._version_type(edge_version)
                 
                 if edge_version_type == VersionType.revision:
                     if include_revisions and edge_version_id not in ancestors:
@@ -205,16 +243,23 @@ class Database:
                         revisions[edge_version_id] = selection
 
                     new_edge.append(selection)
+                    if include_revisions:
+                        graph[edge_version_id] = [selection]
                 else:
                     if edge_version_id not in ancestors:
                         ancestors.append(edge_version_id)
 
-                    if edge_version.previous is not None:                    
+                    if edge_version_type != VersionType.root:
+                        parents = []
+
                         previous_id = edge_version.previous
-                        new_edge.append(previous_id)
+                        parents.append(previous_id)
 
                         if edge_version_type == VersionType.merge:
-                            new_edge.append(edge_version.merge.tributary)
+                            parents.append(edge_version.merge.tributary)
+                        
+                        graph[edge_version_id] = parents
+                        new_edge += parents
 
                         if not open_version and edge_version_type in [VersionType.change, VersionType.merge]:
                             if edge_version_type == VersionType.change:
@@ -230,14 +275,28 @@ class Database:
             edge = new_edge
 
         assert(self.data.root in ancestors)
-        return ancestors, revisions
+
+        if not include_revisions:
+            for version_id, parents in graph.items():
+                new_parents = []
+                for parent_id in parents:
+                    if parent_id in revisions:
+                        new_parents.append(revisions[parent_id])
+                    else:
+                        new_parents.append(parent_id)
+                graph[version_id] = new_parents
+
+        return ancestors, revisions, graph
 
     def _ancestry(self, version_id: VersionID, include_revisions=False) -> List[VersionID]:
         return self._trace_back(version_id, include_revisions=include_revisions)[0]
 
     def _revision_state(self, version_id: VersionID) -> Dict[VersionID, VersionID]:
         return self._trace_back(version_id)[1]
-    
+
+    def _graph(self, version_id: VersionID) -> Dict[VersionID, List[VersionID]]:
+        return self._trace_back(version_id)[2]
+
     def _find_LCA(self, v1_id: VersionID, v2_id: VersionID) -> VersionID:
         """Finds the latest common ancestor of two versions."""
 
@@ -248,12 +307,6 @@ class Database:
                 return ancestor_id
         
         raise YBDBException(f'Unable to find LCA of {v1_id} and {v2_id}')
-
-    def root(self) -> VersionID:
-        return self.data.root
-    
-    def main_branch(self) -> BranchID:
-        return self._get_version(self.data.root).branch
 
     def commit(self, branch_id: BranchID) -> VersionID:
         """Commit the changes that have been made to a branch.
@@ -269,7 +322,7 @@ class Database:
 
         test = current_version_id == 'v,ci'
 
-        current_version_type = Database._version_type(current_version)
+        current_version_type = self._version_type(current_version)
         assert(current_version_type in [VersionType.change, None])
 
         if current_version_type == VersionType.change and current_version.change.unchecked is not None:
@@ -313,7 +366,7 @@ class Database:
 
         version = self._get_version(self._to_version_id(branch_id))
 
-        version_type = Database._version_type(version)
+        version_type = self._version_type(version)
         if version_type not in [VersionType.change, None]:
             raise YBDBException('Cannot make edits to a merge or revision version')
 
@@ -330,14 +383,13 @@ class Database:
         """Creates a new branch starting at a given version."""
 
         start_version = self._get_version(version_id)
-        if Database._is_open(start_version):
+        if self._is_open(start_version):
             raise YBDBException('Cannot make a branch from an open version')
 
         new_branch_id = self._next_branch_id()
         self.data.branches[new_branch_id] = {}
         new_branch = self._get_branch(new_branch_id)
         new_branch.name = branch_name
-        new_branch.parent = start_version.branch
 
         new_version_id, new_version = self._make_new_version()
         new_version.previous = version_id
@@ -361,7 +413,7 @@ class Database:
         merge_version_id = primary_branch.end
         merge_version = self._get_version(merge_version_id)
 
-        merge_version_type = Database._version_type(merge_version)
+        merge_version_type = self._version_type(merge_version)
         assert(merge_version_type in [VersionType.change, None])
         if merge_version_type is not None:
             raise YBDBException('Cannot merge to a branch with uncommitted changes')
@@ -370,7 +422,7 @@ class Database:
         primary_version_id = merge_version.previous
 
         tributary_version = self._get_version(tributary_version_id)
-        if Database._is_open(tributary_version):
+        if self._is_open(tributary_version):
             raise YBDBException('Cannot merge a version with uncommitted changes')
 
         primary_revision_state = self._revision_state(primary_version_id)
@@ -378,9 +430,6 @@ class Database:
         merge_revision_state = self._revision_state(merge_version_id)
 
         revision_changes = {}
-        print(primary_revision_state)
-        print(tributary_revision_state)
-        print(merge_revision_state)
         for revision_id, current_selection in merge_revision_state.items():
             if    (revision_id not in primary_revision_state and revision_id not in tributary_revision_state) \
                or revision_id in primary_revision_state and current_selection != primary_revision_state[revision_id] \
@@ -416,7 +465,7 @@ class Database:
         """
 
         output_version = self._get_version(output_id)
-        if Database._is_open(output_version):
+        if self._is_open(output_version):
             raise YBDBException('Cannot create a revision before an uncommitted version')
 
         if output_version.merge and not primary:
@@ -446,6 +495,143 @@ class Database:
             raise YBDBException('Cannot make a revision select a version downstream of the revision')
         
         revision_version = self._get_version(revision_id)
-        if Database._version_type(revision_version) != VersionType.revision:
+        if self._version_type(revision_version) != VersionType.revision:
             raise YBDBException('Cannot revise a non-revision version')
         revision_version.revision.current = new_id
+
+    @staticmethod
+    def _compute_merge(primary: DBState, tributary: DBState, lca: DBState, rules: JSONDict) -> DBState:       
+        # Giving these strings names so it's easier to know what I'm writing
+        class MergeRule(StrEnum):
+            inherit = ''
+            inherit_from_attribute = 'a'
+            inherit_from_record = 'r'
+            primary_if_conflict = 'p'
+            tributary_if_conflict = 't'
+            primary_always = 'p!'
+            tributary_always = 't!'
+        MR = MergeRule
+        explicit_rules = [MR.primary_if_conflict, MR.tributary_if_conflict, MR.primary_always, MR.tributary_always]
+
+        # Used for selecting which version to take from
+        class MergeChoice(Enum):
+            primary = 0
+            tributary = 1
+        MC = MergeChoice
+
+        # The logic for selecting which version to take from given which versions have made edits and what rule is used
+        def apply_rule(primary_edit: bool, tributary_edit: bool, rule: MergeRule) -> MergeChoice:
+            if rule == MR.primary_always:
+                return MC.primary
+            elif rule == MR.tributary_always:
+                return MC.tributary
+            elif rule == MR.primary_if_conflict:
+                if primary_edit:
+                    return MC.primary
+                else:
+                    return MC.tributary
+            elif rule == MR.tributary_if_conflict:
+                if tributary_edit:
+                    return MC.tributary
+                else:
+                    return MC.primary
+            else:
+                raise YBDBException('get_choice must take an explicit rule, not an inherited rule')
+
+        # Create the output db state
+        result = primary.new()
+
+        # The rules input will be the merge field of a version. Get the subfields for ease of use:
+        default_rule = rules.default.all
+        attribute_rules = rules.defualt.attributes
+        inherit_priority = rules.default.inherit_priority
+        record_rules = rules.records
+
+        # Figure out what fields have been edited
+        primary_deltas = calculate_delta(lca, primary)
+        tributary_deltas = calculate_delta(lca, tributary)
+
+        # Build up the resulting version, record by record
+        for record_id in primary.keys() | tributary.keys():
+            # Get the rules for this record. If there are none for this record in particular, use the global ones
+            if record_id in record_rules:
+                this_record_rules = record_rules[record_id]
+                if this_record_rules.all is not None:
+                    record_all_rule = this_record_rules.all
+                else:
+                    record_all_rule = default_rule
+                if this_record_rules.attributes is not None:
+                    record_attribute_rules = this_record_rules.attributes
+                else:
+                    record_attribute_rules = attribute_rules
+            else:
+                record_all_rule = default_rule
+                record_attribute_rules = attribute_rules
+
+            # Which input(s) have made edits to this version since the LCA?
+            primary_edit = record_id in primary_deltas
+            tributary_edit = record_id in tributary_deltas
+
+            # And what edits have they made?
+            primary_delta = {}
+            tributary_delta = {}
+            if record_id in primary_deltas:
+                primary_delta = primary_deltas[record_id]
+            if record_id in tributary_deltas:
+                tributary_delta = tributary_deltas[record_id]
+            
+            # First deal with the possibility that this version is deleted in one or the other input
+            record_choice = apply_rule(primary_edit, tributary_edit, record_all_rule)
+            if primary_delta == None:
+                # If the primary input has deleted this record
+                if record_choice == MC.tributary:
+                    # If we're choosing the tributary version, then go with that
+                    # Don't need to break it down by attributes because there are none in the primary to compare it to
+                    result[record_id] = tributary[record_id]
+                # If we're choosing the primary version, then don't add anything to the output for this record
+                continue
+            elif tributary_delta == None:
+                # Same logic as above
+                if record_choice == MC.primary:
+                    result[record_id] = primary[record_id]
+                continue
+                
+            # Get the values of this record in the inputs
+            primary_record = primary[record_id]
+            tributary_record = tributary[record_id]
+            # Create the record to be added in the output db
+            new_record = primary_record.new()
+            
+            # Now build up the record, attribute by attribute
+            for attribute in new_record._template:
+                primary_edit = 
+
+
+        
+
+        
+
+
+
+    def compute_version(self, version_id: VersionID, records: Optional[List[str]] = None, attributes: Optional[List[str]] = None) -> dict:
+        version = self._get_version(version_id)
+
+        if self._version_type(version) == VersionType.revision:
+            raise YBDBException('Cannot compute the state of the database at a revision')
+
+        ancestry, revision_state, graph = self._trace_back(version_id)
+
+        revision_outputs: Dict[VersionID, List[VersionID]] = {}
+        for revision_id, selection_id in revision_state.items():
+            if selection_id not in revision_outputs:
+                revision_outputs[selection_id] = []
+            revision_outputs[selection_id].append(revision_id)
+        
+        calculated_versions: Dict[VersionID, Record] = {}
+        
+        while version_id not in calculated_versions:
+            for graph_version_id, parents in graph.items():
+                if graph_version_id == self.root_version_id:
+                    calculated_versions[graph_version_id] = JSONDict('record', self.record_template, {})
+                elif all(parent_id in calculated_versions for parent_id in parents):
+                    pass

@@ -3,7 +3,6 @@
     "branches": {
         "": {
             "name": "",
-            "parent": "",
             "start": "",
             "end": ""
         }
@@ -48,13 +47,14 @@
             "merge": {
                 "tributary": "",
                 "default": {
-                    "all": ["", "p", "t", "p!", "t!"],
-                    "attributes": {"": ["", "p", "t", "p!", "t!"]}
+                    "all": ["", "p", "t", "p!", "t!", "a", "r"],
+                    "inherit priority": ["a", "r"],
+                    "attributes": {"": ["", "p", "t", "p!", "t!", "a", "r"]}
                 },
                 "records": {
                     "": {
-                        "all": ["", "p", "t", "p!", "t!"],
-                        "attributes": {"": ["", "p", "t", "p!", "t!"]}
+                        "all": ["", "p", "t", "p!", "t!", "a", "r"],
+                        "attributes": {"": ["", "p", "t", "p!", "t!", "a", "r"]}
                     }
                 },
                 "revision changes": {"": ""}
@@ -62,7 +62,8 @@
             "revision": {
                 "current": "",
                 "original": ""
-            }
+            },
+            "root": true
         }
     }
 }

@@ -11,8 +11,6 @@ class TestDB(unittest.TestCase):
         db = Database()
         db.setup()
 
-        db.update('b,ba', {})
-        db.commit('b,ba')
         db.new_branch('v,ba', 'branch 2')
         db.update('b,ba', {})
         db.commit('b,ba')
@@ -36,8 +34,6 @@ class TestDB(unittest.TestCase):
         db = Database()
         db.setup()
 
-        db.update('b,ba', {})
-        db.commit('b,ba')
         db.new_branch('v,ba', 'branch 2')
         db.update('b,ba', {})
         db.commit('b,ba')
