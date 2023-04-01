@@ -1,6 +1,6 @@
 from json import dumps
 from copy import deepcopy
-from typing import Union, Optional, Any, cast
+from typing import Union, Optional, Any, cast, Callable
 
 
 RawValue = Union[None, int, float, bool, str, list, dict]
@@ -127,15 +127,17 @@ def _type_check(name: str, data: RawValue, template: RawValue) -> None:
 
 class JSONDict:
     # Need this to prevent getattr from recurring infinitely
-    reserved_names = ['_type_name', '_template', '_any_keys', '_data']
+    reserved_names = ['_type_name', '_template', '_any_keys', '_data', '_callback']
+    # TODO shouldn't I also have to add all the function names? do I actually need all of these?
 
-    def __init__(self, type_name: str, template: Optional[dict], data: dict):
+    def __init__(self, type_name: str, template: Optional[dict], data: dict, callback: Optional[Callable] = None):
         self._type_name: str = type_name
         self._template: Optional[dict] = template
         # If _any_keys is true, this represents a dict that holds data for arbitrary keys,
         # rather than specified attributes
         self._any_keys: bool = template is not None and template.keys() == {''}
         self._data: dict = data
+        self._callback = callback
 
         self._type_check()
     
@@ -221,13 +223,13 @@ class JSONDict:
             if isinstance(template_value, dict) or (template_value is None and isinstance(data_value, dict)):
                 if template_value == {}:
                     template_value = None
-                return JSONDict(self._element_type_name(name), template_value, data_value)
+                return JSONDict(self._element_type_name(name), template_value, data_value, callback=self._callback)
             elif _is_list(template_value) or (template_value is None and isinstance(data_value, list)):
                 if template_value is None or template_value == []:
                     item_template = None
                 else:
                     item_template = template_value[0]
-                return JSONList(self._element_type_name(name), item_template, data_value)
+                return JSONList(self._element_type_name(name), item_template, data_value, callback=self._callback)
             # Otherwise just return the raw value
             else:
                 return data_value
@@ -254,6 +256,10 @@ class JSONDict:
     def values(self):
         return self._iter_dict().values()
     
+    def _do_callback(self) -> None:
+        if self._callback is not None:
+            self._callback()
+
     def __setattr__(self, name: str, value: Value) -> None:
         if name in JSONDict.reserved_names:
             return super().__setattr__(name, value)
@@ -284,11 +290,13 @@ class JSONDict:
         
         # Once we've type checked, can actually set the value
         self._data[name] = value
+        self._do_callback()
     
     def __delattr__(self, name: str) -> None:
         name = underscores_to_spaces(name)
         self._check_name(name)
         del self._data[name]
+        self._do_callback()
     
     def __getitem__(self, name: str) -> Value:
         return self.__getattr__(name)
@@ -315,23 +323,24 @@ class JSONDict:
         return self.__repr__()
     
     def copy(self) -> 'JSONDict':
-        return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data))
+        return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data), callback=self._callback)
     
-    def new(self) -> 'JSONDict':
+    def new(self, callback=None) -> 'JSONDict':
         """Create a new empty JSONDict with the same type name and template"""
 
-        return JSONDict(self._type_name, deepcopy(self._template), {})
+        return JSONDict(self._type_name, deepcopy(self._template), {}, callback=callback)
     
     def print(self) -> None:
         print(dumps(self._data, indent=4))
 
 
 class JSONList:
-    def __init__(self, type_name: str, item_template: RawValue, data: list):
+    def __init__(self, type_name: str, item_template: RawValue, data: list, callback: Optional[Callable] = None):
         self._type_name: str = type_name
         self._item_template: RawValue = item_template
         self._data: list = data
         self._item_type_name: str = f'(item of {self._type_name})'
+        self._callback = callback
 
         self._type_check()
     
@@ -365,14 +374,14 @@ class JSONList:
             dict_template = self._item_template
             if dict_template == {}:
                 dict_template = None
-            return JSONDict(name, dict_template, item)
+            return JSONDict(name, dict_template, item, callback=self._callback)
         elif _is_list(self._item_template) or (self._item_template is None and isinstance(item, list)):
             if self._item_template is None or self._item_template == []:
                 item_template = None
             else:
                 self._item_template = cast(list, self._item_template)
                 item_template = self._item_template[0]
-            return JSONList(name, item_template, item)
+            return JSONList(name, item_template, item, callback=self._callback)
          # Otherwise just return the raw value
         else:
             return item
@@ -391,18 +400,25 @@ class JSONList:
         except:
             raise Exception('I guess you do actually need to check this?')
     
+    def _do_callback(self) -> None:
+        if self._callback is not None:
+            self._callback()
+
     def __setitem__(self, index: int, value: Value) -> None:
         if isinstance(value, JSONDict) or isinstance(value, JSONList):
             value = value._data
         self._type_check_item(value)
         self._data[index] = value
+        self._do_callback()
     
     def __delitem__(self, index: int) -> None:
         del self._data[index]
+        self._do_callback()
     
     def append(self, value: RawValue) -> None:
         self._type_check_item(value)
         self._data.append(value)
+        self._do_callback()
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, JSONList) \
@@ -420,12 +436,12 @@ class JSONList:
         return iter(self.data)
     
     def copy(self) -> 'JSONList':
-        return JSONList(self._type_name, deepcopy(self._item_template), deepcopy(self._data))
+        return JSONList(self._type_name, deepcopy(self._item_template), deepcopy(self._data), callback=self._callback)
     
-    def new(self) -> 'JSONList':
+    def new(self, callback=None) -> 'JSONList':
         """Create a new empty JSONList with the same type name and template"""
 
-        return JSONList(self._type_name, deepcopy(self._item_template), [])
+        return JSONList(self._type_name, deepcopy(self._item_template), [], callback=callback)
     
     def print(self):
         print(dumps(self._data, indent=4))    

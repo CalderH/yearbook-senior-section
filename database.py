@@ -712,6 +712,4 @@ class Database:
             graph = remaining_graph
 
         return calculated_versions[version_id]
-                
-
 

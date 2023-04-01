@@ -2,12 +2,25 @@ from database import Database
 from id_tools import *
 from json_interface import *
 
-template = {"": {"name": "", "age": 0}}
-old_value = {"ba": {"name": "a", "age": 1}, "be": {"name": "e", "age": 2}, "bi": {"name": "i", "age": 3}}
-new_value = {"ba": {"name": "aa", "age": 1}, "be": {"name": "e", "age": 4}, "bo": {"name": "o", "age": 100}}
-old = JSONDict('thing', template, old_value)
-new = JSONDict('thing', template, new_value)
-print(calculate_delta(old, new))
+from datetime import datetime
+import json
+
+
+with open('2022.json') as file:
+    data = json.load(file)
+
+d1 = JSONDict('all', None, data)
+d2 = d1.copy()
+
+start = datetime.now()
+
+for _ in range(100):
+    d = calculate_delta(d1, d2)
+
+end = datetime.now()
+
+print((end - start) / 100)
+print(d1.people['/bab'])
 
 # db = Database()
 # db.setup()
