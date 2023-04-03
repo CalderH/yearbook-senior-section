@@ -1,6 +1,7 @@
 from json import dumps
 from copy import deepcopy
 from typing import Union, Optional, Any, cast, Callable
+import os
 
 
 RawValue = Union[None, int, float, bool, str, list, dict]
@@ -316,11 +317,27 @@ class JSONDict:
             and self._template == other._template \
             and self._data == other._data
 
+    def _template_order(self) -> dict:
+        output = {}
+        
+        if self._any_keys:
+            keys = sorted(list(self._data.keys()))
+        else:
+            keys = list(self._template.keys())
+        
+        for key in keys:
+            value = self[key]
+            if isinstance(key, JSONDict) or isinstance(key, JSONList):
+                value = value._template_order()
+            output[key] = value
+        
+        return output
+        
     def __repr__(self) -> str:
-        return f'{self._type_name}: {self._data}'
+        return f'{self._type_name}: {self._template_order()}'
     
     def __str__(self) -> str:
-        return self.__repr__()
+        return self._template_order().__repr__()
     
     def copy(self) -> 'JSONDict':
         return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data), callback=self._callback)
@@ -331,7 +348,7 @@ class JSONDict:
         return JSONDict(self._type_name, deepcopy(self._template), {}, callback=callback)
     
     def print(self) -> None:
-        print(dumps(self._data, indent=4))
+        print(dumps(self._template_order(), indent=4))
 
 
 class JSONList:
@@ -420,21 +437,35 @@ class JSONList:
         self._data.append(value)
         self._do_callback()
 
+    def __contains__(self, item) -> bool:
+        if isinstance(item, JSONDict) or isinstance(item, JSONList):
+            item = item._data
+        
+        return item in self._data
+
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, JSONList) \
             and self._type_name == other._type_name \
             and self._item_template == other._item_template \
             and self._data == other._data
     
+    def _template_order(self) -> list:
+        output = []
+
+        for item in self:
+            if isinstance(item, JSONDict) or isinstance(item, JSONList):
+                output.append(item._template_order())
+            else:
+                output.append(item)
+        
+        return output
+
     def __repr__(self) -> str:
-        return f'{self._type_name}: {self._data}'
+        return f'{self._type_name}: {self._template_order()}'
     
     def __str__(self) -> str:
         return self.__repr__()
-    
-    def __iter__(self):
-        return iter(self.data)
-    
+
     def copy(self) -> 'JSONList':
         return JSONList(self._type_name, deepcopy(self._item_template), deepcopy(self._data), callback=self._callback)
     
@@ -444,7 +475,7 @@ class JSONList:
         return JSONList(self._type_name, deepcopy(self._item_template), [], callback=callback)
     
     def print(self):
-        print(dumps(self._data, indent=4))    
+        print(dumps(self._template_order(), indent=4))    
 
 
 def calculate_delta(old: JSONDict, new: JSONDict) -> JSONDict:
