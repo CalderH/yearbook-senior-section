@@ -1,26 +1,6 @@
-from database import Database
+# from database import Database
 from id_tools import *
 from json_interface import *
-
-from datetime import datetime
-import json
-
-
-with open('2022.json') as file:
-    data = json.load(file)
-
-d1 = JSONDict('all', None, data)
-d2 = d1.copy()
-
-start = datetime.now()
-
-for _ in range(100):
-    d = calculate_delta(d1, d2)
-
-end = datetime.now()
-
-print((end - start) / 100)
-print(d1.people['/bab'])
 
 # db = Database()
 # db.setup()
@@ -42,6 +22,15 @@ print(d1.people['/bab'])
 # db.revise(rev, better)
 # db.merge(br1, ce, {}, {})
 
+class A:
+    def __init__(self, x):
+        self.x = x
+
+    def set_y(self):
+        self.y = 1
+        
+x = A(3)
+x.set_y()
 
 # db.data.print()
 
