@@ -1,23 +1,25 @@
 Database = None
 VersionID = None
+BranchID = None
 
 import json
 from json_interface import *
-from yearbook_setup import core_path
-from id_tools import *
+from yearbook_setup import core_path, construct_path, PS
+import ids
 from typing import Dict, List, Tuple, NewType
 from enum import Enum, StrEnum
 import view
+import os
 
 Record = NewType('Record', JSONDict)
 Version = NewType('Version', JSONDict)
 Branch = NewType('Branch', JSONDict)
 DBState = NewType('DBState', JSONDict)
 
-RecordID = NewType('RecordID', ID)
-VersionID = NewType('VersionID', ID)
-BranchID = NewType('BranchID', ID)
-ViewID = NewType('ViewID', ID)
+RecordID = NewType('RecordID', ids.ID)
+VersionID = NewType('VersionID', ids.ID)
+BranchID = NewType('BranchID', ids.ID)
+ViewID = NewType('ViewID', ids.ID)
 
 
 class VersionType(Enum):
@@ -27,53 +29,100 @@ class VersionType(Enum):
     root = 3
 
 
-with open(core_path('database template')) as file:
-    database_template: dict = json.load(file)
-
-
 class YBDBException(Exception):
     pass
 
 
 class Database:
-    def __init__(self, path: Optional[str] = None,
-                 data: Optional[dict] = None,
-                 record_template: Optional[dict] = None):
+    def __init__(self, path: Optional[str], record_template: Optional[dict] = None):
         self.path = path
 
-        if data is None:
-            if path is None:
-                self._data = JSONDict('database', database_template, {})
-                self.setup()
-            else:
-                self._data = None
-        else:
-            self._data = JSONDict('database', database_template, data)
+        with open(core_path('version template')) as file:
+            self._version_template: dict = json.load(file)
+        with open(core_path('branch template')) as file:
+            self._branch_template: dict = json.load(file)
+        with open(core_path('view template')) as file:
+            self._view_template: dict = json.load(file)
 
-        self.views: List[view.EditableVersionView] = []
+        with open(core_path('id info template')) as file:
+            self._id_info_template: dict = json.load(file)
+
+        self._versions = JSONDict('versions', {'': self._version_template}, {})
+        self._branches = JSONDict('versions', {'': self._branch_template}, {})
+        self._views = JSONDict('versions', {'': self._view_template}, {})
+        
+        self._id_info = JSONDict('id info', self._id_info_template, {})
+
+        self.view_objects: List[view.EditableVersionView] = []
 
         self._state_template = {"": record_template}
-        self.root_version_id = None
-        self.main_branch_id = None
+    
+    def _database_path(self, key: str, *args: List[str]) -> str:
+        return construct_path(self.path, (PS.core, key), *args)
     
     def load(self) -> None:
-        """Load the data from the JSON file
+        """Load the data from the database directory
         
         Anytime you create a Database object based on a file, you must next call eiter load or setup.
         """
 
-        if self.path is None:
-            return
-        with open(self.path) as file:
-            self._data = JSONDict('database', database_template, json.load(file))
-    
+        def load_dir_to_attr(database_dir_key, thing_template, thing_name, attr):
+            for file_info in os.scandir(self._database_path(database_dir_key)):
+                if not file_info.is_file():
+                    continue
+                filename = file_info.name
+                root, extension = os.path.splitext(filename)
+                if extension != '.json':
+                    continue
+                with open(self._database_path(database_dir_key, filename)) as file:
+                    thing_data = json.load(file)
+                try:
+                    JSONDict('', thing_template, thing_data)
+                except:
+                    continue
+                id = thing_data['id']
+                if id != root:
+                    raise Exception(f'Encountered a {thing_name} whose filename {root} is different from its id {id}')
+                attr[id] = thing_data
+        
+        with open(self._database_path('id info')) as file:
+            self._id_info.set_data(json.load(file))
+        load_dir_to_attr('versions', self._version_template, 'version', self._versions)
+        load_dir_to_attr('branches', self._branch_template, 'branch', self._branches)
+        load_dir_to_attr('views', self._view_template, 'view', self._views)
+        
     def save(self) -> None:
-        """Save this object's data to the JSON file"""
+        """Save this object's data to the database"""
 
         if self.path is None:
             return
-        with open(self.path, 'w') as file:
-            json.dump(self._data._data, file, indent=4)
+        
+        def save_attr_to_dir(database_dir_key, thing_template, attr):
+            for file_info in os.scandir(self._database_path(database_dir_key)):
+                if not file_info.is_file():
+                    continue
+                filename = file_info.name
+                extension = os.path.splitext(filename)[1]
+                if extension != '.json':
+                    continue
+                file_path = self._database_path(database_dir_key, filename)
+                with open(file_path) as file:
+                    thing_data = json.load(file)
+                try:
+                    JSONDict('', thing_template, thing_data)
+                except:
+                    continue
+                os.remove(file_path)
+            
+            for id, value in attr.items():
+                with open(f'{id}.json', 'w') as file:
+                    json.dump(value._template_order(), file, indent=4)
+        
+        with open(self._database_path('id info'), 'w') as file:
+            json.dump(self._id_info._template_order(), indent=4)
+        save_attr_to_dir('versions', self._version_template, self._versions)
+        save_attr_to_dir('branches', self._branch_template, self._branches)
+        save_attr_to_dir('views', self._view_template, self._views)
     
     def setup(self) -> None:
         """Create all the fields of an initial, empty database
@@ -81,68 +130,69 @@ class Database:
         Anytime you create a Database object based on a file, you must next call eiter load or setup.
         """
 
-        self._data = JSONDict('database', database_template, {})
+        if self.path is None:
+            user_str = ''
+            self._id_info.user = user_str
+            self._id_info.next_record_id = ids.compose_id(ids.IDType.record, user_str, ids.start_sequence)
+            self._id_info.next_version_id = ids.compose_id(ids.IDType.version, user_str, ids.start_sequence)
+            self._id_info.next_branch_id = ids.compose_id(ids.IDType.branch, user_str, ids.start_sequence)
+            self._id_info.next_view_id = ids.compose_id(ids.IDType.view, user_str, ids.start_sequence)
+        else:
+            with open(self._database_path('id info')) as file:
+                self._id_info.set_data(json.load(file))
 
-        root_version_id = convert_id(start_id, IDType.version)
-        main_branch_id = convert_id(start_id, IDType.branch)
+        main_branch = self._branches[ids.trunk_branch_id]
+        main_branch.name = 'trunk'
+        main_branch.start = ids.root_version_id
 
-        self.root_version_id = root_version_id
-        self.main_branch_id = main_branch_id
-
-        self._data.root = root_version_id
-        self._data.branches = {main_branch_id: {}}
-        main_branch = self._data.branches[main_branch_id]
-        main_branch.name = 'main'
-        main_branch.start = root_version_id
-        self._data.working_branch = main_branch_id
-
-        self._data.views = {}
-
-        self._data.next_version_id = next_id(root_version_id)
-        self._data.next_branch_id = next_id(main_branch_id)
-        self._data.next_view_id = convert_id(start_id, IDType.view)
-
-        self._data.versions = {root_version_id: {}}
-        root_version = self._data.versions[root_version_id]
+        self._versions[ids.root_version_id] = {}
+        root_version = self._get_version(ids.root_version_id)
         root_version.message = 'root'
-        root_version.branch = main_branch_id
+        root_version.branch = ids.trunk_branch_id
         root_version.root = True
 
         end_version_id, end_version = self._make_new_version()
         root_version.next = end_version_id
-        end_version.previous = root_version_id
-        end_version.branch = main_branch_id
+        end_version.previous = ids.root_version_id
+        end_version.branch = ids.trunk_branch_id
         main_branch.end = end_version_id
 
         self.save()
     
     def sync_from_view(self, view: view.EditableVersionView) -> None:
         changed_version = view.version_id
-        for other_view in self.views:
+        for other_view in self.view_objects:
             if other_view is view:
                 continue
             if changed_version in other_view.affecting_versions:
                 other_view.sync_from_db()
     
-    def _next_version_id(self) -> VersionID:
-        """Get a new unique version ID and increment the version ID counter"""
+    def _next_record_id(self) -> RecordID:
+        """Get a new unique record ids.ID and increment the version ids.ID counter"""
 
-        output = self._data.next_version_id
-        self._data.next_version_id = next_id(output)
+        output = self._id_info.next_record_id
+        self._id_info.next_record_id = ids.next_id(output)
+        return output
+
+    def _next_version_id(self) -> VersionID:
+        """Get a new unique version ids.ID and increment the version ids.ID counter"""
+
+        output = self._id_info.next_version_id
+        self._id_info.next_version_id = ids.next_id(output)
         return output
 
     def _next_branch_id(self) -> BranchID:
-        """Get a new unique branch ID and increment the version ID counter"""
+        """Get a new unique branch ids.ID and increment the version ids.ID counter"""
 
-        output = self._data.next_branch_id
-        self._data.next_branch_id = next_id(output)
+        output = self._id_info.next_branch_id
+        self._id_info.next_branch_id = ids.next_id(output)
         return output
     
     def _next_view_id(self) -> ViewID:
-        """Get a new unique view ID and increment the version ID counter"""
+        """Get a new unique view ids.ID and increment the version ids.ID counter"""
 
-        output = self._data.next_view_id
-        self._data.next_view_id = next_id(output)
+        output = self._id_info.next_view_id
+        self._id_info.next_view_id = ids.next_id(output)
         return output
 
     @staticmethod
@@ -159,23 +209,23 @@ class Database:
             return type_dict[included_types[0]]
 
     def _get_branch(self, branch_id: BranchID) -> Branch:
-        """Get the branch with a given ID, or error if there is no such branch"""
+        """Get the branch with a given ids.ID, or error if there is no such branch"""
 
-        if branch_id in self._data.branches:
-            return self._data.branches[branch_id]
+        if branch_id in self._branches:
+            return self._branches[branch_id]
         else:
             raise YBDBException(f'There is no branch with id {branch_id}')
     
     def _get_version(self, version_id: VersionID) -> Version:
-        """Get the version with a given ID, or error if there is no such branch"""
+        """Get the version with a given ids.ID, or error if there is no such branch"""
 
-        if version_id in self._data.versions:
-            return self._data.versions[version_id]
+        if version_id in self._versions:
+            return self._versions[version_id]
         else:
             raise YBDBException(f'There is no version with id {version_id}')
     
-    def _to_version_id(self, id: ID, allow_open = True) -> VersionID:
-        is_branch = id_type(id) == IDType.branch
+    def _to_version_id(self, id: ids.ID, allow_open = True) -> VersionID:
+        is_branch = ids.id_type(id) == ids.IDType.branch
 
         if is_branch:
             version_id = self._get_branch(id).end
@@ -194,11 +244,11 @@ class Database:
             return version_id
     
     def _make_new_version(self) -> Tuple[VersionID, Version]:
-        "Create a new empty version, and return the verison's ID and version itself"
+        "Create a new empty version, and return the verison's ids.ID and version itself"
 
         id = self._next_version_id()
-        self._data.versions[id] = {}
-        return id, self._data.versions[id]
+        self._versions[id] = {}
+        return id, self._versions[id]
 
     @staticmethod
     def _is_open(version: Version) -> bool:
@@ -286,7 +336,7 @@ class Database:
 
             edge = new_edge
 
-        assert(self._data.root in ancestors)
+        assert(ids.root_version_id in ancestors)
 
         if not include_revisions:
             for version_id, parents in graph.items():
@@ -399,7 +449,7 @@ class Database:
             raise YBDBException('Cannot make a branch from an open version')
 
         new_branch_id = self._next_branch_id()
-        self._data.branches[new_branch_id] = {}
+        self._branches[new_branch_id] = {}
         new_branch = self._get_branch(new_branch_id)
         new_branch.name = branch_name
 
@@ -500,7 +550,7 @@ class Database:
         self.save()
         return revision_id
 
-    def revise(self, revision_id: VersionID, new_id: ID) -> None:
+    def revise(self, revision_id: VersionID, new_id: ids.ID) -> None:
         new_version_id = self._to_version_id(new_id)
         
         if revision_id in self._ancestry(new_version_id, include_revisions=True):
@@ -679,7 +729,7 @@ class Database:
         
         return output
 
-    def compute_state(self, id: ID) -> DBState:
+    def compute_state(self, id: ids.ID) -> DBState:
         version_id = self._to_version_id(id)
         version = self._get_version(version_id)
 
@@ -694,7 +744,7 @@ class Database:
             remaining_graph = graph.copy()
 
             for ancestor_id, parent_ids in graph.items():
-                if ancestor_id == self.root_version_id:
+                if ancestor_id == ids.root_version_id:
                     calculated_versions[ancestor_id] = JSONDict('database state', self._state_template, {})
                     
                     del remaining_graph[ancestor_id]

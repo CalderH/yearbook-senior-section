@@ -1,0 +1,18 @@
+{
+    "id": "",
+    "path": "",
+    "branch": {
+        "id": "",
+        "records": [""],
+        "attributes": [""]
+    },
+    "version": {
+        "id": "",
+        "records": [""],
+        "attributes": [""]
+    },
+    "merge": {
+        "primary": "",
+        "secondary": [""]
+    }
+}

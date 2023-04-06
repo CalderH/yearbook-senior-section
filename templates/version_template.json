@@ -1,0 +1,34 @@
+{
+    "message": "",
+    "notes": "",
+    "previous": "",
+    "next": "",
+    "branch": "",
+    "branches out": [""],
+    "merged to": [""],
+    "change": {
+        "deltas": {"": {}},
+        "revision changes": {"": ""},
+        "unchecked": {"": [""]}
+    },
+    "merge": {
+        "tributary": "",
+        "default": {
+            "all": ["", "p", "t", "p!", "t!", "a", "r"],
+            "inherit priority": ["a", "r"],
+            "attributes": {"": ["", "p", "t", "p!", "t!", "a", "r"]}
+        },
+        "records": {
+            "": {
+                "all": ["", "p", "t", "p!", "t!", "a", "r"],
+                "attributes": {"": ["", "p", "t", "p!", "t!", "a", "r"]}
+            }
+        },
+        "revision changes": {"": ""}
+    },
+    "revision": {
+        "current": "",
+        "original": ""
+    },
+    "root": true
+}

@@ -198,7 +198,45 @@ class JSONDict:
     def __getattr__(self, name: str) -> Value:
         if name in JSONDict.reserved_names:
             return super().__getattribute__(name)
-        
+        else:
+            return self[name]
+    
+    def __hasattr__(self, name: str) -> bool:
+        return name in self._data and self._data[name] is not None
+    
+    def _iter_dict(self):
+        return {name: value for name in self._data if (value := self[name]) is not None}
+
+    def __iter__(self):
+        # When you iterate through the JSONDict, you only want the ones with non-None value
+        return iter(self._iter_dict())
+    
+    def items(self):
+        return self._iter_dict().items()
+    
+    def keys(self):
+        return self._iter_dict().keys()
+    
+    def values(self):
+        return self._iter_dict().values()
+    
+    def _do_callback(self) -> None:
+        if self._callback is not None:
+            self._callback()
+
+    def __setattr__(self, name: str, value: Value) -> None:
+        if name in JSONDict.reserved_names:
+            super().__setattr__(name, value)
+        else:
+            self[name] = value
+    
+    def __delattr__(self, name: str) -> None:
+        name = underscores_to_spaces(name)
+        self._check_name(name)
+        del self._data[name]
+        self._do_callback()
+    
+    def __getitem__(self, name: str) -> Value:
         # For legibility, names in the JSON file have spaces; those are represented as underscores here
         name = underscores_to_spaces(name)
         # First check the name
@@ -238,33 +276,10 @@ class JSONDict:
         else:
             return None
     
-    def __hasattr__(self, name: str) -> bool:
-        return name in self._data and self._data[name] is not None
+    def __contains__(self, name: str) -> bool:
+        return self.__hasattr__(name)
     
-    def _iter_dict(self):
-        return {name: value for name, value in self._data.items() if value is not None}
-
-    def __iter__(self):
-        # When you iterate through the JSONDict, you only want the ones with non-None value
-        return iter(self._iter_dict())
-    
-    def items(self):
-        return self._iter_dict().items()
-    
-    def keys(self):
-        return self._iter_dict().keys()
-    
-    def values(self):
-        return self._iter_dict().values()
-    
-    def _do_callback(self) -> None:
-        if self._callback is not None:
-            self._callback()
-
-    def __setattr__(self, name: str, value: Value) -> None:
-        if name in JSONDict.reserved_names:
-            return super().__setattr__(name, value)
-
+    def __setitem__(self, name: str, value: Value) -> None:
         name = underscores_to_spaces(name)
 
         if isinstance(value, JSONDict) or isinstance(value, JSONList):
@@ -293,24 +308,17 @@ class JSONDict:
         self._data[name] = value
         self._do_callback()
     
-    def __delattr__(self, name: str) -> None:
-        name = underscores_to_spaces(name)
-        self._check_name(name)
-        del self._data[name]
-        self._do_callback()
-    
-    def __getitem__(self, name: str) -> Value:
-        return self.__getattr__(name)
-    
-    def __contains__(self, name: str) -> bool:
-        return self.__hasattr__(name)
-    
-    def __setitem__(self, name: str, value: Value) -> None:
-        self.__setattr__(name, value)
-    
     def __delitem__(self, name: str) -> None:
         self.__delattr__(name)
     
+    def set_data(self, new_data: dict) -> None:
+        """Sets the data of this object to new data"""
+
+        # First try creating a new object with this data. If the type check fails, then this object's data will not be impacted.
+        _type_check()
+        test_obj = JSONDict(self._type_name, self._template, new_data)
+        self._data = new_data
+
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, JSONDict) \
             and self._type_name == other._type_name \
@@ -436,6 +444,13 @@ class JSONList:
         self._type_check_item(value)
         self._data.append(value)
         self._do_callback()
+
+    def set_data(self, new_data: list) -> None:
+        """Sets the data of this object to new data"""
+        
+        # First try creating a new object with this data. If the type check fails, then this object's data will not be impacted.
+        test_obj = JSONList(self._type_name, self._item_template, new_data)
+        self._data = new_data
 
     def __contains__(self, item) -> bool:
         if isinstance(item, JSONDict) or isinstance(item, JSONList):

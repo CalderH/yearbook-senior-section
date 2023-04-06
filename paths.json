@@ -1,0 +1,10 @@
+{
+    "version template": "templates/version_template.json",
+    "branch template": "templates/branch_template.json",
+    "view template": "templates/view_template.json",
+    "id info template": "templates/id_info_template.json",
+    "id info": "id_info.json",
+    "versions": "versions",
+    "branches": "branches",
+    "views": "views"
+}
