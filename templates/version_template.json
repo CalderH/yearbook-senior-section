@@ -3,11 +3,12 @@
     "timestamp": 0,
     "message": "",
     "notes": "",
+    "branch": "",
     "previous": "",
     "next": "",
-    "branch": "",
     "branches out": [""],
     "merged to": [""],
+    "revisions selecting": [""],
     "change": {
         "deltas": {"": {}},
         "revision changes": {"": ""},

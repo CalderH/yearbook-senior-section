@@ -318,11 +318,18 @@ class JSONDict:
         JSONDict(self._type_name, self._template, new_data)
         self._data = new_data
 
+    def __len__(self) -> int:
+        return len(self._iter_dict())
+
     def __eq__(self, other: Any) -> bool:
-        return isinstance(other, JSONDict) \
-            and self._type_name == other._type_name \
-            and self._template == other._template \
-            and self._data == other._data
+        if isinstance(other, JSONDict):
+            return     self._type_name == other._type_name \
+                   and self._template == other._template \
+                   and self._data == other._data
+        elif isinstance(other, dict):
+            return self._data == other
+        else:
+            return False
 
     def _template_order(self) -> dict:
         output = {}
@@ -441,10 +448,20 @@ class JSONList:
         del self._data[index]
         self._do_callback()
     
-    def append(self, value: RawValue) -> None:
+    def append(self, value: Value) -> None:
+        if isinstance(value, JSONDict) or isinstance(value, JSONList):
+            value = value._data
+
         self._type_check_item(value)
         self._data.append(value)
         self._do_callback()
+
+    def remove(self, value: Value) -> None:
+        if isinstance(value, JSONDict) or isinstance(value, JSONList):
+            value = value._data
+        
+        if value in self._data:
+            self._data.remove(value)
 
     def set_data(self, new_data: list) -> None:
         """Sets the data of this object to new data"""
@@ -459,11 +476,18 @@ class JSONList:
         
         return item in self._data
 
+    def __len__(self) -> int:
+        return len(self._data)
+
     def __eq__(self, other: Any) -> bool:
-        return isinstance(other, JSONList) \
-            and self._type_name == other._type_name \
-            and self._item_template == other._item_template \
-            and self._data == other._data
+        if isinstance(other, JSONList):
+            return     self._type_name == other._type_name \
+                   and self._item_template == other._item_template \
+                   and self._data == other._data
+        elif isinstance(other, list):
+            return self._data == other
+        else:
+            return False
     
     def _template_order(self) -> list:
         output = []

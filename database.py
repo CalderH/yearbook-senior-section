@@ -395,8 +395,6 @@ class Database:
         current_version_id = branch.end
         current_version = self._get_version(current_version_id)
 
-        test = current_version_id == 'v,ci'
-
         current_version_type = self._version_type(current_version)
         assert(current_version_type in [VersionType.change, None])
 
@@ -424,6 +422,19 @@ class Database:
                     revision_changes[revision_id] = revisions[revision_id]
             current_version.change.revision_changes = revision_changes
         
+        previous_revisions_using = self._get_version(current_version.previous).revisions_using
+        previous_revisions_using_copy = previous_revisions_using.copy()
+        current_version.revisions_using = []
+        for revision_id in previous_revisions_using_copy:
+            revision = self._get_version(revision_id)
+            if ids.id_type(revision.revision.current) == ids.IDType.branch:
+                previous_revisions_using.remove(revision_id)
+                current_version.revisions_using.append(revision_id)
+            else:
+                continue
+        if current_version.revisions_using == []:
+            del current_version.revisions_using
+            
         current_version.timestamp = self._timestamp()
         
         new_version_id, new_version = self._make_new_version()
@@ -521,6 +532,19 @@ class Database:
         if revision_changes != {}:
             merge_info.revision_changes = revision_changes
         
+        previous_revisions_using = self._get_version(merge_version.previous).revisions_using
+        previous_revisions_using_copy = previous_revisions_using.copy()
+        merge_version.revisions_using = []
+        for revision_id in previous_revisions_using_copy:
+            revision = self._get_version(revision_id)
+            if ids.id_type(revision.revision.current) == ids.IDType.branch:
+                previous_revisions_using.remove(revision_id)
+                merge_version.revisions_using.append(revision_id)
+            else:
+                continue
+        if merge_version.revisions_using == []:
+            del merge_version.revisions_using
+
         merge_version.timestamp = self._timestamp()
 
         if tributary_version.merged_to is None:
@@ -536,39 +560,58 @@ class Database:
         self.save()
         return merge_version_id
 
-    def setup_revision(self, output_id: VersionID, primary: bool = True) -> VersionID:
-        """Creates a new revision version before a given version.
+    def setup_revision(self, prev_id: VersionID) -> VersionID:
+        """Creates a new revision version after a given version.
         
-        output_id: the version that the revision will go into
-        if that version is a merge, use the primary field to indicate whether this revision affects the primary input (True) or the tributary input (False)
+        prev_id: the version that the revision will go after
+        returns the id of the resulting revision
         """
 
-        output_version = self._get_version(output_id)
-        if self._is_open(output_version):
-            raise YBDBException('Cannot create a revision before an uncommitted version')
-
-        if output_version.merge and not primary:
-            input_id = output_version.merge.tributary
-        else:
-            input_id = output_version.previous
-        input_version = self._get_version(input_id)
-
+        prev_version = self._get_version(prev_id)
+        if self._is_open(prev_version):
+            raise YBDBException('Cannot create a revision after an uncommitted version')
+        
+        next_version = self._get_version(prev_version.next)
+    
         revision_id, revision_version = self._make_new_version()
 
-        input_version.next = revision_id
-        output_version.previous = revision_id
-        revision_version.previous = input_id
-        revision_version.next = output_id
+        revision_version.branch = prev_version.branch
+        revision_version.previous = prev_id
+        revision_version.next = prev_version.next
+        prev_version.next = revision_id
+        next_version.previous = revision_id
+
+        if prev_version.branches_out is not None:
+            revision_version.branches_out = prev_version.branches_out
+            for branch_id in revision_version.branches_out:
+                branch_start_version = self._get_version(self._get_branch(branch_id).start)
+                branch_start_version.prev = revision_id
+        
+        if prev_version.merged_to is not None:
+            revision_version.merged_to = prev_version.merged_to
+            for merge_version_id in revision_version.merged_to:
+                merge_version = self._get_version(merge_version_id)
+                merge_version.merge.tributary = revision_id
+        
+        if prev_version.revisions_using is not None:
+            revision_version.revisions_using = prev_version.revisions_using
+            for other_revision_id in revision_version.revisions_using:
+                other_revision = self._get_version(other_revision_id)
+                other_revision.current = revision_id
 
         revision_version.revision = {}
-        revision_version.revision.current = input_id
-        revision_version.revision.original = input_id
+        revision_version.revision.current = prev_id
+        revision_version.revision.original = prev_id
+
+        if prev_version.revisions_using is None:
+            prev_version.revisions_using = []
+        prev_version.revisions_using.append(revision_id)
 
         self.save()
         return revision_id
 
     def revise(self, revision_id: VersionID, new_id: ids.ID) -> None:
-        new_version_id = self._to_version_id(new_id)
+        new_version_id = self._to_version_id(new_id, allow_open=False)
         
         if revision_id in self._ancestry(new_version_id, include_revisions=True):
             raise YBDBException('Cannot make a revision select a version downstream of the revision')
@@ -576,6 +619,15 @@ class Database:
         revision_version = self._get_version(revision_id)
         if self._version_type(revision_version) != VersionType.revision:
             raise YBDBException('Cannot revise a non-revision version')
+        
+        old_current = self._get_version(revision_version.revision.current)
+        new_current = self._get_version(new_version_id)
+
+        old_current.revisions_using.remove(revision_id)
+        if new_current.revisions_using is None:
+            new_current.revisions_using = []
+        new_current.revisions_using.append(revision_id)
+
         revision_version.revision.current = new_id
 
     @staticmethod
