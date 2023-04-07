@@ -315,8 +315,7 @@ class JSONDict:
         """Sets the data of this object to new data"""
 
         # First try creating a new object with this data. If the type check fails, then this object's data will not be impacted.
-        _type_check()
-        test_obj = JSONDict(self._type_name, self._template, new_data)
+        JSONDict(self._type_name, self._template, new_data)
         self._data = new_data
 
     def __eq__(self, other: Any) -> bool:
@@ -335,10 +334,12 @@ class JSONDict:
         
         for key in keys:
             value = self[key]
-            if isinstance(key, JSONDict) or isinstance(key, JSONList):
+            if value is None:
+                continue
+            if isinstance(value, JSONDict) or isinstance(value, JSONList):
                 value = value._template_order()
             output[key] = value
-        
+
         return output
         
     def __repr__(self) -> str:

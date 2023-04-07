@@ -57,13 +57,13 @@ def compose_id(id_type: IDType, user: str, sequence: str):
     if id_type is None:
         type_str = ''
     else:
-        type_str = id_to_letter(id_type)
+        type_str = id_to_letter[id_type]
     return type_str + separator + user + sequence
 
 root_version_id = compose_id(IDType.version, '', 'ROOT')
 trunk_branch_id = compose_id(IDType.branch, '', 'TRUNK')
     
-def decompose_id(id: str) -> Tuple[str, Optional[IDType]]:
+def decompose_id(id: str) -> Tuple[IDType, str, str]:
     """Separates the type, user, and sequence of an ID.
 
     Returns a tuple containing
@@ -90,4 +90,4 @@ def decompose_id(id: str) -> Tuple[str, Optional[IDType]]:
 
 
 def id_type(id: str) -> Optional[IDType]:
-    return decompose_id(id)[1]
+    return decompose_id(id)[0]

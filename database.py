@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple, NewType
 from enum import Enum, StrEnum
 import view
 import os
+import datetime
 
 Record = NewType('Record', JSONDict)
 Version = NewType('Version', JSONDict)
@@ -97,7 +98,13 @@ class Database:
         if self.path is None:
             return
         
+        if not os.path.exists(self.path):
+            os.mkdir(self.path)
+        
         def save_attr_to_dir(database_dir_key, thing_template, attr):
+            if not os.path.exists(self._database_path(database_dir_key)):
+                os.mkdir(self._database_path(database_dir_key))
+            
             for file_info in os.scandir(self._database_path(database_dir_key)):
                 if not file_info.is_file():
                     continue
@@ -115,38 +122,43 @@ class Database:
                 os.remove(file_path)
             
             for id, value in attr.items():
-                with open(f'{id}.json', 'w') as file:
+                with open(self._database_path(database_dir_key, f'{id}.json'), 'w') as file:
                     json.dump(value._template_order(), file, indent=4)
         
         with open(self._database_path('id info'), 'w') as file:
-            json.dump(self._id_info._template_order(), indent=4)
+            json.dump(self._id_info._template_order(), file, indent=4)
         save_attr_to_dir('versions', self._version_template, self._versions)
         save_attr_to_dir('branches', self._branch_template, self._branches)
         save_attr_to_dir('views', self._view_template, self._views)
     
-    def setup(self) -> None:
+    @staticmethod
+    def _timestamp():
+        return datetime.datetime.now(datetime.timezone.utc).timestamp()
+
+    def setup(self, user_str: Optional[str] = None) -> None:
         """Create all the fields of an initial, empty database
         
-        Anytime you create a Database object based on a file, you must next call eiter load or setup.
+        Anytime you create a Database object based on a file, you must next call either load or setup.
         """
 
-        if self.path is None:
+        if user_str is None:
             user_str = ''
-            self._id_info.user = user_str
-            self._id_info.next_record_id = ids.compose_id(ids.IDType.record, user_str, ids.start_sequence)
-            self._id_info.next_version_id = ids.compose_id(ids.IDType.version, user_str, ids.start_sequence)
-            self._id_info.next_branch_id = ids.compose_id(ids.IDType.branch, user_str, ids.start_sequence)
-            self._id_info.next_view_id = ids.compose_id(ids.IDType.view, user_str, ids.start_sequence)
-        else:
-            with open(self._database_path('id info')) as file:
-                self._id_info.set_data(json.load(file))
+        self._id_info.user = user_str
+        self._id_info.next_record_id = ids.compose_id(ids.IDType.record, user_str, ids.start_sequence)
+        self._id_info.next_version_id = ids.compose_id(ids.IDType.version, user_str, ids.start_sequence)
+        self._id_info.next_branch_id = ids.compose_id(ids.IDType.branch, user_str, ids.start_sequence)
+        self._id_info.next_view_id = ids.compose_id(ids.IDType.view, user_str, ids.start_sequence)
 
+        self._branches[ids.trunk_branch_id] = {}
         main_branch = self._branches[ids.trunk_branch_id]
+        main_branch.id = ids.trunk_branch_id
         main_branch.name = 'trunk'
         main_branch.start = ids.root_version_id
 
         self._versions[ids.root_version_id] = {}
         root_version = self._get_version(ids.root_version_id)
+        root_version.id = ids.root_version_id
+        root_version.timestamp = self._timestamp()
         root_version.message = 'root'
         root_version.branch = ids.trunk_branch_id
         root_version.root = True
@@ -168,28 +180,28 @@ class Database:
                 other_view.sync_from_db()
     
     def _next_record_id(self) -> RecordID:
-        """Get a new unique record ids.ID and increment the version ids.ID counter"""
+        """Get a new unique record ID and increment the record ID counter"""
 
         output = self._id_info.next_record_id
         self._id_info.next_record_id = ids.next_id(output)
         return output
 
     def _next_version_id(self) -> VersionID:
-        """Get a new unique version ids.ID and increment the version ids.ID counter"""
+        """Get a new unique version ID and increment the version ID counter"""
 
         output = self._id_info.next_version_id
         self._id_info.next_version_id = ids.next_id(output)
         return output
 
     def _next_branch_id(self) -> BranchID:
-        """Get a new unique branch ids.ID and increment the version ids.ID counter"""
+        """Get a new unique branch ID and increment the branch ID counter"""
 
         output = self._id_info.next_branch_id
         self._id_info.next_branch_id = ids.next_id(output)
         return output
     
     def _next_view_id(self) -> ViewID:
-        """Get a new unique view ids.ID and increment the version ids.ID counter"""
+        """Get a new unique view ID and increment the view ID counter"""
 
         output = self._id_info.next_view_id
         self._id_info.next_view_id = ids.next_id(output)
@@ -209,7 +221,7 @@ class Database:
             return type_dict[included_types[0]]
 
     def _get_branch(self, branch_id: BranchID) -> Branch:
-        """Get the branch with a given ids.ID, or error if there is no such branch"""
+        """Get the branch with a given ID, or error if there is no such branch"""
 
         if branch_id in self._branches:
             return self._branches[branch_id]
@@ -217,7 +229,7 @@ class Database:
             raise YBDBException(f'There is no branch with id {branch_id}')
     
     def _get_version(self, version_id: VersionID) -> Version:
-        """Get the version with a given ids.ID, or error if there is no such branch"""
+        """Get the version with a given ID, or error if there is no such branch"""
 
         if version_id in self._versions:
             return self._versions[version_id]
@@ -244,10 +256,11 @@ class Database:
             return version_id
     
     def _make_new_version(self) -> Tuple[VersionID, Version]:
-        "Create a new empty version, and return the verison's ids.ID and version itself"
+        "Create a new empty version, and return the version's ID and the version itself"
 
         id = self._next_version_id()
         self._versions[id] = {}
+        self._versions[id].id = id
         return id, self._versions[id]
 
     @staticmethod
@@ -269,9 +282,9 @@ class Database:
         - revisions: a dict indicating which selection is made for each revision in the ancestry
         - graph: a dict representing the relationships among the ancestors
             - Each version is mapped to a list containing its direct parents:
-                - Root: empty list
-                - Change: the one previous version
-                - Merge: the primary and tributary inputs
+                - Root -> empty list
+                - Change -> the one previous version
+                - Merge -> the primary and tributary inputs (in that order)
             - By default does not include revision versions, but can include them by setting include_revisions to True
         """
 
@@ -411,6 +424,8 @@ class Database:
                     revision_changes[revision_id] = revisions[revision_id]
             current_version.change.revision_changes = revision_changes
         
+        current_version.timestamp = self._timestamp()
+        
         new_version_id, new_version = self._make_new_version()
         new_version.branch = branch_id
         current_version.next = new_version_id
@@ -505,6 +520,8 @@ class Database:
         merge_info.records = record_instructions
         if revision_changes != {}:
             merge_info.revision_changes = revision_changes
+        
+        merge_version.timestamp = self._timestamp()
 
         if tributary_version.merged_to is None:
             tributary_version.merged_to = []
@@ -566,7 +583,7 @@ class Database:
         # Giving these strings names so it's easier to know what I'm writing
         class MergeRule(StrEnum):
             inherit = ''
-            inherit_prioritizing_attribute = 'a'
+            inherit_prioritizing_field = 'f'
             inherit_prioritizing_record = 'r'
             primary_if_conflict = 'p'
             tributary_if_conflict = 't'
@@ -605,7 +622,7 @@ class Database:
 
         # The rules input will be the merge field of a version. Get the subfields for ease of use:
         default_rule = rules.default.all
-        attribute_rules = rules.defualt.attributes
+        field_rules = rules.default.fields
         inherit_priority = rules.default.inherit_priority
         record_rules = rules.records
 
@@ -639,7 +656,7 @@ class Database:
                 # If this record is not in the primary input
                 if record_choice == MC.tributary:
                     # If we're choosing the tributary version, then just go with that
-                    # Don't need to break it down by attributes because there are none in the primary to compare it to
+                    # Don't need to break it down by fields because there are none in the primary to compare it to
                     output[record_id] = tributary[record_id]
                 # If we're choosing the primary version, then don't add anything to the output for this record
                 continue
@@ -662,18 +679,18 @@ class Database:
             # Create the record to be added in the output db
             output_record = primary_record.new()
             
-            # Now build up the record, attribute by attribute
-            for attribute in output_record._template:
+            # Now build up the record, field by field
+            for field in output_record._template:
                 # Get the four rules that are relevant here
                 # default_rule: the default rule for the whole merge
-                # attribute_rule: the default rule for this attribute across all records
-                # record_rule: the default rule for all attributes of this record
-                # record_attribute_rule: the rule for this specific attribute of this record
+                # field_rule: the default rule for this field across all records
+                # record_rule: the default rule for all fields of this record
+                # record_field_rule: the rule for this specific field of this record
 
-                if attribute_rules is not None and attribute in attribute_rules:
-                    attribute_rule = attribute_rules[attribute]
+                if field_rules is not None and field in field_rules:
+                    field_rule = field_rules[field]
                 else:
-                    attribute_rule = MR.inherit
+                    field_rule = MR.inherit
 
                 if record_rules is not None and record_id in record_rules:
                     this_record_rules = record_rules[record_id]
@@ -683,27 +700,27 @@ class Database:
                     else:
                         record_rule = MR.inherit
                     
-                    if (a := this_record_rules.attributes) is not None and (r := a[attribute]) is not None:
-                        record_attribute_rule = r
+                    if (a := this_record_rules.fields) is not None and (r := a[field]) is not None:
+                        record_field_rule = r
                     else:
-                        record_attribute_rule = MR.inherit
+                        record_field_rule = MR.inherit
                 
                 # From these four rules, figure out what rule to apply in this case
-                if record_attribute_rule in explicit_rules:
-                    rule = record_attribute_rule
+                if record_field_rule in explicit_rules:
+                    rule = record_field_rule
                 else:
-                    if attribute_rule in explicit_rules:
-                        if record_rule in explicit_rules and attribute_rule != record_rule:
-                            if record_attribute_rule == MR.inherit_prioritizing_attribute:
-                                rule = attribute_rule
-                            elif record_attribute_rule == MR.inherit_prioritizing_record:
+                    if field_rule in explicit_rules:
+                        if record_rule in explicit_rules and field_rule != record_rule:
+                            if record_field_rule == MR.inherit_prioritizing_field:
+                                rule = field_rule
+                            elif record_field_rule == MR.inherit_prioritizing_record:
                                 rule = record_rule
-                            elif inherit_priority == MR.inherit_prioritizing_attribute:
-                                rule = attribute_rule
+                            elif inherit_priority == MR.inherit_prioritizing_field:
+                                rule = field_rule
                             else:
                                 rule = record_rule
                         else:
-                            rule = attribute_rule
+                            rule = field_rule
                     else:
                         if record_rule in explicit_rules:
                             rule = record_rule
@@ -711,19 +728,19 @@ class Database:
                             rule = default_rule
                 
                 # See which inputs made edits
-                primary_edit = attribute in primary_record_delta
-                tributary_edit = attribute in tributary_record_delta
+                primary_edit = field in primary_record_delta
+                tributary_edit = field in tributary_record_delta
 
                 # Figure out which to go with
-                record_attribute_choice = apply_rule(primary_edit, tributary_edit, rule)
-                if record_attribute_choice == MC.primary:
-                    output_attribute = primary_record[attribute]
+                record_field_choice = apply_rule(primary_edit, tributary_edit, rule)
+                if record_field_choice == MC.primary:
+                    output_field = primary_record[field]
                 else:
-                    output_attribute = tributary_record[attribute]
+                    output_field = tributary_record[field]
                 
                 # Set the value in the record
-                if output_attribute is not None:
-                    output_record[attribute] = output_attribute
+                if output_field is not None:
+                    output_record[field] = output_field
 
             output[record_id] = output_record
         
@@ -776,3 +793,14 @@ class Database:
 
         return calculated_versions[version_id]
 
+    def print(self):
+        if self.path is not None:
+            print(f'LOCATION: {self.path}\n')
+        print('\nID INFO --------------------')
+        self._id_info.print()
+        print('\n\nVIEWS --------------------')
+        self._views.print()
+        print('\n\nBRANCHES --------------------')
+        self._branches.print()
+        print('\n\nVERSIONS --------------------')
+        self._versions.print()

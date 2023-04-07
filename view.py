@@ -30,6 +30,11 @@ class BranchEndView(EditableVersionView):
         self.database = database
         self.branch_id = branch_id
 
+        self.version_id = None
+        self.affecting_versions = None
+        self._view = None
+        self._previous_view = None
+
         self.sync_from_db()
     
     def sync_from_db(self):
@@ -37,7 +42,7 @@ class BranchEndView(EditableVersionView):
         previous_version_id = self.database._to_version_id(self.branch_id, allow_open=False)
 
         self._view = self.database.compute_state(self.version_id)
-        self._view._callback = self.broadcast_update
+        self._view._callback = self.sync_to_db
         self._previous_view = self.database.compute_state(previous_version_id)
         revisions = self.database._revision_state(self.version_id).keys()
         self._affecting_versions = {self.version_id} | revisions
@@ -46,3 +51,5 @@ class BranchEndView(EditableVersionView):
         delta = json_interface.calculate_delta(self._previous_view, self._view)
         self.database.update(self.branch_id, delta) # TODO unchecked
         self.database.sync_from_view(self)
+    
+    # def 

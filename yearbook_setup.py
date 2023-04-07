@@ -35,7 +35,7 @@ if os.path.exists('folders.json'):
         path_items = []
         for item in args:
             if isinstance(item, PathSource):
-                path_items.append(head_dict(item))
+                path_items.append(head_dict[item])
             elif isinstance(item, str):
                 path_items.append(item)
             elif isinstance(item, tuple):
@@ -46,30 +46,28 @@ if os.path.exists('folders.json'):
         
         return os.path.join(*path_items)
 
-    def core_path(key):
+    def core_path(key: str) -> str:
         return construct_path(PS.core, (PS.core, key))
     
-    def school_path(key):
+    def school_path(key: str) -> str:
         return construct_path(PS.school, (PS.school, key))
     
-    def year_path(key):
+    def year_path(key: str) -> str:
         return construct_path(PS.year, (PS.year, key))
-
-    # def core_path(key, *args):
-    #     return os.path.join(_core_path_head, core_paths[key], *args)
-
-    # def school_path(key, *args):
-    #     return os.path.join(_school_path_head, school_paths[key], *args)
-
-    # def year_path(key, *args):
-    #     return os.path.join(_year_path_head, year_paths[key], *args)
-    
-    # __all__ = ['core_paths', 'school_paths', 'year_paths', 'construct_path', 'core_path', 'school_path', 'year_path', 'PathSource', 'PS']
 else:
-    with open('folders.json') as file:
+    with open('paths.json') as file:
         core_paths = json.load(file)
     
     def core_path(key, *args):
         return os.path.join(core_paths[key], *args)
+
+    def construct_path(*_):
+        raise NameError('construct_path is not defined when running from yearbook_core, since only core path is specified')
     
-    # __all__ = ['core_paths', 'core_path']
+    def school_path(_):
+        raise NameError('school_path is not defined when running from yearbook_core, since no school path is specified')
+
+    def year_path(_):
+        raise NameError('year_path is not defined when running from yearbook_core, since no year path is specified')
+
+__all__ = ['construct_path', 'core_path', 'school_path', 'year_path', 'PathSource', 'PS']

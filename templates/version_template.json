@@ -1,4 +1,6 @@
 {
+    "id": "",
+    "timestamp": 0,
     "message": "",
     "notes": "",
     "previous": "",
@@ -14,14 +16,14 @@
     "merge": {
         "tributary": "",
         "default": {
-            "all": ["", "p", "t", "p!", "t!", "a", "r"],
-            "inherit priority": ["a", "r"],
-            "attributes": {"": ["", "p", "t", "p!", "t!", "a", "r"]}
+            "all": ["", "p", "t", "p!", "t!", "a", "f"],
+            "inherit priority": ["a", "f"],
+            "fields": {"": ["", "p", "t", "p!", "t!", "a", "f"]}
         },
         "records": {
             "": {
-                "all": ["", "p", "t", "p!", "t!", "a", "r"],
-                "attributes": {"": ["", "p", "t", "p!", "t!", "a", "r"]}
+                "all": ["", "p", "t", "p!", "t!", "a", "f"],
+                "fields": {"": ["", "p", "t", "p!", "t!", "a", "f"]}
             }
         },
         "revision changes": {"": ""}
