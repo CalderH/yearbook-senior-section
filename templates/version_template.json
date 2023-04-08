@@ -8,11 +8,10 @@
     "next": "",
     "branches out": [""],
     "merged to": [""],
-    "revisions selecting": [""],
+    "revisions using": [""],
     "change": {
         "deltas": {"": {}},
-        "revision changes": {"": ""},
-        "unchecked": {"": [""]}
+        "revision changes": {"": ""}
     },
     "merge": {
         "tributary": "",

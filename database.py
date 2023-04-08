@@ -387,7 +387,6 @@ class Database:
         """Commit the changes that have been made to a branch.
         
         This creates a new blank version at the end of the branch, so the previous end version cannot be edited anymore.
-        If the end version has any unchecked edits, raises an error.
         """
 
         branch = self._get_branch(branch_id)
@@ -397,9 +396,6 @@ class Database:
 
         current_version_type = self._version_type(current_version)
         assert(current_version_type in [VersionType.change, None])
-
-        if current_version_type == VersionType.change and current_version.change.unchecked is not None:
-            raise YBDBException('Cannot commit a version with unchecked edits')
 
         if current_version.previous is not None:
             revisions = self._revision_state(current_version_id)
@@ -446,7 +442,7 @@ class Database:
         self.save()
         return current_version_id
     
-    def update(self, branch_id: BranchID, deltas: Record, unchecked: Optional[Dict[RecordID, List[str]]] = None) -> None:
+    def update(self, branch_id: BranchID, deltas: Record) -> None:
         """Incorporates edits to the version at the end of a branch.
         
         This *replaces* the previous deltas with new deltas, rather than adding onto the previous deltas.
@@ -462,8 +458,6 @@ class Database:
             # If the open version has not had any edits yet, need to mark that this version is a change rather than a merge
             version.change = {}
         version.change.deltas = deltas
-        if unchecked is not None:
-            version.change.unchecked = unchecked
 
         self.save()
 

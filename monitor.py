@@ -6,7 +6,7 @@ def monitor(path):
     name = os.path.basename(path)
     def f():
         last_mtime = None
-        while(True):
+        while True:
             mtime = os.path.getmtime(path)
             if last_mtime is not None and mtime != last_mtime:
                 print(f'edited {name}!')
