@@ -129,7 +129,6 @@ def _type_check(name: str, data: RawValue, template: RawValue) -> None:
 class JSONDict:
     # Need this to prevent getattr from recurring infinitely
     reserved_names = ['_type_name', '_template', '_any_keys', '_data', '_callback']
-    # TODO shouldn't I also have to add all the function names? do I actually need all of these?
 
     def __init__(self, type_name: str, template: Optional[dict], data: dict, callback: Optional[Callable] = None):
         self._type_name: str = type_name

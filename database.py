@@ -54,7 +54,7 @@ class Database:
         
         self._id_info = JSONDict('id info', self._id_info_template, {})
 
-        self.view_objects: List[view.EditableVersionView] = []
+        # self.view_objects: List[view.EditableVersionView] = []
 
         self._state_template = {"": record_template}
     
@@ -171,13 +171,13 @@ class Database:
 
         self.save()
     
-    def sync_from_view(self, view: view.EditableVersionView) -> None:
-        changed_version = view.version_id
-        for other_view in self.view_objects:
-            if other_view is view:
-                continue
-            if changed_version in other_view.affecting_versions:
-                other_view.sync_from_db()
+    # def sync_from_view(self, view: view.EditableVersionView) -> None:
+    #     changed_version = view.version_id
+    #     for other_view in self.view_objects:
+    #         if other_view is view:
+    #             continue
+    #         if changed_version in other_view.affecting_versions:
+    #             other_view.sync_from_db()
     
     def _next_record_id(self) -> RecordID:
         """Get a new unique record ID and increment the record ID counter"""
@@ -265,6 +265,7 @@ class Database:
 
     @staticmethod
     def _is_open(version: Version) -> bool:
+        
         return version.next is None
     
     def check_well_formed(self):
