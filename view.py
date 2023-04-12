@@ -10,7 +10,7 @@ class View(ABC):
         self.database = database
     
     @abstractmethod
-    def __getitem__(self, name) -> database.Version:
+    def __getitem__(self, name) -> database.Record:
         ...
 
 
@@ -22,7 +22,7 @@ class AtomicView(View):
         self.version_id: str = version_id
         self._state: database.DBState = self.db.compute_state(self.version_id)
     
-    def __getitem__(self, name) -> database.Version:
+    def __getitem__(self, name) -> database.Record:
         return self._state[name]
     
     def process_file(self, cv: 'ContainerView') -> None:
@@ -54,14 +54,14 @@ class ContainerView(View):
         return self.av()[name]
 
 
-class ClosedVersionView(AtomicView):
+class ClosedView(AtomicView):
     def __init__(self, db: Database, version_id: database.VersionID):
         if db._is_open(version_id):
             raise YBDBException('Cannot input an open version id to a ClosedVersionView')
         super().__init__(db, version_id)
 
 
-class OpenVersionView(AtomicView):
+class OpenView(AtomicView):
     def __init__(self, db: Database, version_id: Database.VersionID):
         if not db._is_open(version_id):
             raise YBDBException('Cannot input a closed version id to an OpendVersionView')
@@ -69,6 +69,12 @@ class OpenVersionView(AtomicView):
     
     def sync_from_db(self) -> None:
         self._state = self.db.compute_state(self.version_id)
+
+
+class OpenChangeView(OpenView):
+    def __init__(self, db: Database, version_id: Database.VersionID):
+        super().__init__(db, version_id)
+    
 
 
 

@@ -128,9 +128,9 @@ def _type_check(name: str, data: RawValue, template: RawValue) -> None:
 
 class JSONDict:
     # Need this to prevent getattr from recurring infinitely
-    reserved_names = ['_type_name', '_template', '_any_keys', '_data', '_callback']
+    reserved_names = ['_type_name', '_template', '_any_keys', '_data', '_callback', '_static']
 
-    def __init__(self, type_name: str, template: Optional[dict], data: dict, callback: Optional[Callable] = None):
+    def __init__(self, type_name: str, template: Optional[dict], data: dict, callback: Optional[Callable] = None, static: bool = False):
         self._type_name: str = type_name
         self._template: Optional[dict] = template
         # If _any_keys is true, this represents a dict that holds data for arbitrary keys,
@@ -138,6 +138,7 @@ class JSONDict:
         self._any_keys: bool = template is not None and template.keys() == {''}
         self._data: dict = data
         self._callback = callback
+        self._static = static
 
         self._type_check()
     
@@ -194,6 +195,10 @@ class JSONDict:
             except:
                 raise Exception('I guess you do actually need to check this?')
     
+    def _check_static(self):
+        if self._static:
+            raise TypeError('Cannot edit a static JSONDict')
+
     def __getattr__(self, name: str) -> Value:
         if name in JSONDict.reserved_names:
             return super().__getattribute__(name)
@@ -230,6 +235,7 @@ class JSONDict:
             self[name] = value
     
     def __delattr__(self, name: str) -> None:
+        self._check_static()
         name = underscores_to_spaces(name)
         self._check_name(name)
         del self._data[name]
@@ -261,13 +267,13 @@ class JSONDict:
             if isinstance(template_value, dict) or (template_value is None and isinstance(data_value, dict)):
                 if template_value == {}:
                     template_value = None
-                return JSONDict(self._element_type_name(name), template_value, data_value, callback=self._callback)
+                return JSONDict(self._element_type_name(name), template_value, data_value, callback=self._callback, static=self.static)
             elif _is_list(template_value) or (template_value is None and isinstance(data_value, list)):
                 if template_value is None or template_value == []:
                     item_template = None
                 else:
                     item_template = template_value[0]
-                return JSONList(self._element_type_name(name), item_template, data_value, callback=self._callback)
+                return JSONList(self._element_type_name(name), item_template, data_value, callback=self._callback, static=self.static)
             # Otherwise just return the raw value
             else:
                 return data_value
@@ -279,6 +285,8 @@ class JSONDict:
         return self.__hasattr__(name)
     
     def __setitem__(self, name: str, value: Value) -> None:
+        self._check_static()
+
         name = underscores_to_spaces(name)
 
         if isinstance(value, JSONDict) or isinstance(value, JSONList):
@@ -311,6 +319,7 @@ class JSONDict:
         self.__delattr__(name)
     
     def set_data(self, new_data: dict) -> None:
+        self._check_static()
         """Sets the data of this object to new data"""
 
         # First try creating a new object with this data. If the type check fails, then this object's data will not be impacted.
@@ -355,10 +364,10 @@ class JSONDict:
         return self._template_order().__repr__()
     
     def copy(self) -> 'JSONDict':
-        return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data), callback=self._callback)
+        return JSONDict(self._type_name, deepcopy(self._template), deepcopy(self._data), callback=self._callback, static=self.static)
     
     def new(self, callback=None) -> 'JSONDict':
-        """Create a new empty JSONDict with the same type name and template"""
+        """Create a new empty, mutable JSONDict with the same type name and template"""
 
         return JSONDict(self._type_name, deepcopy(self._template), {}, callback=callback)
     
@@ -367,12 +376,13 @@ class JSONDict:
 
 
 class JSONList:
-    def __init__(self, type_name: str, item_template: RawValue, data: list, callback: Optional[Callable] = None):
+    def __init__(self, type_name: str, item_template: RawValue, data: list, callback: Optional[Callable] = None, static: bool = False):
         self._type_name: str = type_name
         self._item_template: RawValue = item_template
         self._data: list = data
         self._item_type_name: str = f'(item of {self._type_name})'
         self._callback = callback
+        self._static = static
 
         self._type_check()
     
@@ -397,6 +407,10 @@ class JSONList:
             except:
                 raise Exception('I guess you do actually need to check this?')
     
+    def _check_static(self):
+        if self._static:
+            raise TypeError('Cannot edit a static JSONList')
+
     def __getitem__(self, index: int) -> Value:
         item = self._data[index]
         name = self._item_type_name
@@ -406,14 +420,14 @@ class JSONList:
             dict_template = self._item_template
             if dict_template == {}:
                 dict_template = None
-            return JSONDict(name, dict_template, item, callback=self._callback)
+            return JSONDict(name, dict_template, item, callback=self._callback, static=self.static)
         elif _is_list(self._item_template) or (self._item_template is None and isinstance(item, list)):
             if self._item_template is None or self._item_template == []:
                 item_template = None
             else:
                 self._item_template = cast(list, self._item_template)
                 item_template = self._item_template[0]
-            return JSONList(name, item_template, item, callback=self._callback)
+            return JSONList(name, item_template, item, callback=self._callback, static=self.static)
          # Otherwise just return the raw value
         else:
             return item
@@ -437,6 +451,7 @@ class JSONList:
             self._callback()
 
     def __setitem__(self, index: int, value: Value) -> None:
+        self._check_static()
         if isinstance(value, JSONDict) or isinstance(value, JSONList):
             value = value._data
         self._type_check_item(value)
@@ -444,10 +459,12 @@ class JSONList:
         self._do_callback()
     
     def __delitem__(self, index: int) -> None:
+        self._check_static()
         del self._data[index]
         self._do_callback()
     
     def append(self, value: Value) -> None:
+        self._check_static()
         if isinstance(value, JSONDict) or isinstance(value, JSONList):
             value = value._data
 
@@ -456,6 +473,7 @@ class JSONList:
         self._do_callback()
 
     def remove(self, value: Value) -> None:
+        self._check_static()
         if isinstance(value, JSONDict) or isinstance(value, JSONList):
             value = value._data
         
@@ -464,9 +482,11 @@ class JSONList:
 
     def set_data(self, new_data: list) -> None:
         """Sets the data of this object to new data"""
+
+        self._check_static()
         
         # First try creating a new object with this data. If the type check fails, then this object's data will not be impacted.
-        test_obj = JSONList(self._type_name, self._item_template, new_data)
+        JSONList(self._type_name, self._item_template, new_data)
         self._data = new_data
 
     def __contains__(self, item) -> bool:
@@ -506,10 +526,10 @@ class JSONList:
         return self.__repr__()
 
     def copy(self) -> 'JSONList':
-        return JSONList(self._type_name, deepcopy(self._item_template), deepcopy(self._data), callback=self._callback)
+        return JSONList(self._type_name, deepcopy(self._item_template), deepcopy(self._data), callback=self._callback, static=self.static)
     
     def new(self, callback=None) -> 'JSONList':
-        """Create a new empty JSONList with the same type name and template"""
+        """Create a new empty, mutable JSONList with the same type name and template"""
 
         return JSONList(self._type_name, deepcopy(self._item_template), [], callback=callback)
     
@@ -571,6 +591,8 @@ def add_delta(old: JSONDict, delta: JSONDict) -> JSONDict:
     """
 
     new = old.copy()
+    static = old._static
+    new._static = False
     for name in delta._data:
         delta_value = delta[name]
         # Need to check "name in new" to distinguish between a nonexistent attribute (Which returns None) and an attribute with value None
@@ -581,4 +603,5 @@ def add_delta(old: JSONDict, delta: JSONDict) -> JSONDict:
             new[name] = add_delta(old_value, delta_value)
         else:
             new[name] = delta_value
+    new._static = static
     return new
