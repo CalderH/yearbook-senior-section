@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Set
 import database
 from database import Database, YBDBException
 import json_interface
 
 
 class View(ABC):
-    def __init__(self, database: Database):
-        self.database = database
+    def __init__(self, db: Database):
+        self.db: Database = db
     
     @abstractmethod
     def __getitem__(self, name) -> database.Record:
@@ -17,7 +17,7 @@ class View(ABC):
 class AtomicView(View):
     def __init__(self, db: Database, version_id: Database.VersionID):
         super().__init__(db)
-        if version_id not in self.database._versions:
+        if version_id not in self.db._versions:
             raise YBDBException(f'There is no version with id {version_id}')
         self.version_id: str = version_id
         self._state: database.DBState = self.db.compute_state(self.version_id)
@@ -59,38 +59,37 @@ class ClosedView(AtomicView):
         if db._is_open(version_id):
             raise YBDBException('Cannot input an open version id to a ClosedVersionView')
         super().__init__(db, version_id)
+        self._state.make_static()
 
 
 class OpenView(AtomicView):
     def __init__(self, db: Database, version_id: Database.VersionID):
         if not db._is_open(version_id):
-            raise YBDBException('Cannot input a closed version id to an OpendVersionView')
+            raise YBDBException('Cannot input a closed version id to an OpenVersionView')
         super().__init__(db, version_id)
+        self.affecting_versions: Set[database.VersionID] = self._calculate_affecting_versions()
     
     def sync_from_db(self) -> None:
         self._state = self.db.compute_state(self.version_id)
+        self.affecting_versions = self._calculate_affecting_versions()
+    
+    def _calculate_affecting_versions(self):
+        revisions = self.db._revision_state(self.version_id).keys()
+        return {self.version_id} | revisions
 
 
 class OpenChangeView(OpenView):
     def __init__(self, db: Database, version_id: Database.VersionID):
         super().__init__(db, version_id)
-    
+        previous_version_id = self.db._get_version(self.version_id).previous
+        current_revision_state = self.db._revision_state(self.version_id)
+        self._previous_state = self.db.compute_state(previous_version_id, current_revision_state)
 
-
-
-# class EditableVersionView(View):
-#     def __init__(self, database: Database):
-#         super().__init__(database)
-#         self.version_id = None
-#         self.affecting_versions = None
-    
-#     @abstractmethod
-#     def sync_from_db(self):
-#         pass
-
-#     @abstractmethod
-#     def sync_to_db(self):
-#         pass
+    def sync_from_db(self):
+        super().sync_from_db()
+        previous_version_id = self.db._get_version(self.version_id).previous
+        current_revision_state = self.db._revision_state(self.version_id)
+        self._previous_state = self.db.compute_state(previous_version_id, current_revision_state)
 
 
 # class BranchEndView(EditableVersionView):

@@ -265,14 +265,14 @@ class Database:
 
     @staticmethod
     def _is_open(version: Version) -> bool:
-        
+
         return version.next is None
     
     def check_well_formed(self):
         # TODO
         pass
 
-    def _trace_back(self, version_id: VersionID, include_revisions=False) -> Tuple[List[VersionID], Dict[VersionID, VersionID], Dict[VersionID, List[VersionID]]]:
+    def _trace_back(self, version_id: VersionID, include_revisions=False, revision_state: Optional[Dict[VersionID, VersionID]] = None) -> Tuple[List[VersionID], Dict[VersionID, VersionID], Dict[VersionID, List[VersionID]]]:
         """Traverses backward through the versions to find every version that contributes to the input version.
 
         Returns 3 things:
@@ -290,7 +290,10 @@ class Database:
         """
 
         ancestors: List[VersionID] = []
-        revisions: Dict[VersionID, VersionID] = {}
+        if revision_state is None:
+            revisions: Dict[VersionID, VersionID] = {}
+        else:
+            revisions: Dict[VersionID, VersionID] = revision_state.copy()
         graph: Dict[VersionID, List[VersionID]] = {}
 
         edge: List[VersionID] = [version_id]
@@ -308,7 +311,9 @@ class Database:
                     if include_revisions and edge_version_id not in ancestors:
                         ancestors.append(edge_version_id)
 
-                    if open_version:
+                    if revision_state is not None:
+                        selection = revision_state[edge_version]
+                    elif open_version:
                         selection = self._to_version_id(edge_version.revision.current, allow_open=False)
                     elif edge_version_id in revisions:
                         selection = revisions[edge_version_id]
@@ -337,7 +342,7 @@ class Database:
                         graph[edge_version_id] = parents
                         new_edge += parents
 
-                        if not open_version and edge_version_type in [VersionType.change, VersionType.merge]:
+                        if revision_state is None and not open_version and edge_version_type in [VersionType.change, VersionType.merge]:
                             if edge_version_type == VersionType.change:
                                 edge_version_revision_changes = edge_version.change.revision_changes
                             else:
@@ -364,14 +369,14 @@ class Database:
 
         return ancestors, revisions, graph
 
-    def _ancestry(self, version_id: VersionID, include_revisions=False) -> List[VersionID]:
-        return self._trace_back(version_id, include_revisions=include_revisions)[0]
+    def _ancestry(self, version_id: VersionID, include_revisions=False, revision_state: Optional[Dict[VersionID, VersionID]] = None) -> List[VersionID]:
+        return self._trace_back(version_id, include_revisions=include_revisions, revision_state=revision_state)[0]
 
     def _revision_state(self, version_id: VersionID) -> Dict[VersionID, VersionID]:
         return self._trace_back(version_id)[1]
 
-    def _graph(self, version_id: VersionID) -> Dict[VersionID, List[VersionID]]:
-        return self._trace_back(version_id)[2]
+    def _graph(self, version_id: VersionID, revision_state: Optional[Dict[VersionID, VersionID]] = None) -> Dict[VersionID, List[VersionID]]:
+        return self._trace_back(version_id, revision_state=revision_state)[2]
 
     def _find_LCA(self, v1_id: VersionID, v2_id: VersionID) -> VersionID:
         """Finds the latest common ancestor of two versions."""
@@ -793,14 +798,14 @@ class Database:
         
         return output
 
-    def compute_state(self, id: ids.ID) -> DBState:
+    def compute_state(self, id: ids.ID, revision_state: Optional[Dict[VersionID, VersionID]] = None) -> DBState:
         version_id = self._to_version_id(id)
         version = self._get_version(version_id)
 
         if self._version_type(version) == VersionType.revision:
             raise YBDBException('Cannot compute the state of the database at a revision')
 
-        graph = self._graph(version_id)
+        graph = self._graph(version_id, revision_state=revision_state)
         
         calculated_versions: Dict[VersionID, DBState] = {}
         

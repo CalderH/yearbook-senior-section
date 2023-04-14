@@ -199,6 +199,12 @@ class JSONDict:
         if self._static:
             raise TypeError('Cannot edit a static JSONDict')
 
+    def make_static(self):
+        self._static = True
+    
+    def make_mutable(self):
+        self._static = False
+
     def __getattr__(self, name: str) -> Value:
         if name in JSONDict.reserved_names:
             return super().__getattribute__(name)
@@ -410,6 +416,12 @@ class JSONList:
     def _check_static(self):
         if self._static:
             raise TypeError('Cannot edit a static JSONList')
+    
+    def make_static(self):
+        self._static = True
+    
+    def make_mutable(self):
+        self._static = False
 
     def __getitem__(self, index: int) -> Value:
         item = self._data[index]
@@ -592,7 +604,7 @@ def add_delta(old: JSONDict, delta: JSONDict) -> JSONDict:
 
     new = old.copy()
     static = old._static
-    new._static = False
+    new.make_mutable()
     for name in delta._data:
         delta_value = delta[name]
         # Need to check "name in new" to distinguish between a nonexistent attribute (Which returns None) and an attribute with value None
