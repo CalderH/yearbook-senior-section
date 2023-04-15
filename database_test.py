@@ -39,7 +39,7 @@ class TestDB(unittest.TestCase):
         db.commit('b,ba')
         db.update('b,be', {})
         db.commit('b,be')
-        db.merge('b,ba', 'v,bi', {}, {})
+        db.start_merge('b,ba', 'v,bi', {}, {})
 
         self.assertEqual(db._ancestry('v,ca'), ['v,ca', 'v,bo', 'v,be', 'v,bi', 'v,ba'])
 

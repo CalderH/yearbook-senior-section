@@ -401,29 +401,43 @@ class Database:
         current_version = self._get_version(current_version_id)
 
         current_version_type = self._version_type(current_version)
-        assert(current_version_type in [VersionType.change, None])
 
-        if current_version.previous is not None:
-            revisions = self._revision_state(current_version_id)
-            previous_revisions = self._revision_state(current_version.previous)
-            revisions_have_changed = revisions != previous_revisions
-        else:
-            revisions_have_changed = False
+        if current_version_type == VersionType.merge:
+            primary_revision_state = self._revision_state(current_version.previous)
+            tributary_revision_state = self._revision_state(current_version.merge.tributary)
+            merge_revision_state = self._revision_state(current_version_id)
 
-        if not(current_version_type == VersionType.change or revisions_have_changed):
-            # If nothing has changed, don't create a new version
-            return
-        
-        if current_version_type is None and revisions_have_changed:
-            current_version.change = {}
-        
-        if revisions_have_changed:
             revision_changes = {}
-            for revision_id in revisions:
-                if revision_id not in previous_revisions or revisions[revision_id] != previous_revisions[revision_id]:
-                    revision_changes[revision_id] = revisions[revision_id]
-            current_version.change.revision_changes = revision_changes
-        
+            for revision_id, current_selection in merge_revision_state.items():
+                if    (revision_id not in primary_revision_state and revision_id not in tributary_revision_state) \
+                   or revision_id in primary_revision_state and current_selection != primary_revision_state[revision_id] \
+                   or revision_id in tributary_revision_state and current_selection != tributary_revision_state[revision_id]:
+                    revision_changes[revision_id] = current_selection
+            
+            if revision_changes != {}:
+                current_version.merge.revision_changes = revision_changes
+        else:
+            if current_version.previous is not None:
+                revisions = self._revision_state(current_version_id)
+                previous_revisions = self._revision_state(current_version.previous)
+                revisions_have_changed = revisions != previous_revisions
+            else:
+                revisions_have_changed = False
+
+            if current_version_type is None and not revisions_have_changed:
+                # If nothing has changed, don't create a new version
+                return
+            
+            if current_version_type is None and revisions_have_changed:
+                current_version.change = {}
+            
+            if revisions_have_changed:
+                revision_changes = {}
+                for revision_id in revisions:
+                    if revision_id not in previous_revisions or revisions[revision_id] != previous_revisions[revision_id]:
+                        revision_changes[revision_id] = revisions[revision_id]
+                current_version.change.revision_changes = revision_changes
+            
         previous_revisions_using = self._get_version(current_version.previous).revisions_using
         previous_revisions_using_copy = previous_revisions_using.copy()
         current_version.revisions_using = []
@@ -432,13 +446,10 @@ class Database:
             if ids.id_type(revision.revision.current) == ids.IDType.branch:
                 previous_revisions_using.remove(revision_id)
                 current_version.revisions_using.append(revision_id)
-            else:
-                continue
         if current_version.revisions_using == []:
             del current_version.revisions_using
-            
-        current_version.timestamp = self._timestamp()
-        
+                
+        current_version.timestamp = self._timestamp()    
         new_version_id, new_version = self._make_new_version()
         new_version.branch = branch_id
         current_version.next = new_version_id
@@ -458,8 +469,8 @@ class Database:
             version = self._get_version(self._to_version_id(id))
         else:
             version = self._get_version(id)
-            if (not self._is_open(version)) or (self._version_type(version) == VersionType.merge):
-                raise YBDBException('Invalid version input to update')
+        if (not self._is_open(version)) or (self._version_type(version) == VersionType.merge):
+            raise YBDBException('Invalid version input to update')
 
         version_type = self._version_type(version)
         if version_type not in [VersionType.change, None]:
@@ -497,10 +508,8 @@ class Database:
 
         self.save()
         return new_branch_id
-    
-    
 
-    def merge(self, primary_branch_id: BranchID, tributary_version_id: VersionID,
+    def start_merge(self, primary_branch_id: BranchID, tributary_version_id: VersionID,
                        default_instructions: dict, record_instructions: dict) -> VersionID:
         """Merges a given version into the end of a given branch."""
         
@@ -509,63 +518,75 @@ class Database:
         merge_version = self._get_version(merge_version_id)
 
         merge_version_type = self._version_type(merge_version)
-        assert(merge_version_type in [VersionType.change, None])
         if merge_version_type is not None:
             raise YBDBException('Cannot merge to a branch with uncommitted changes')
         
         assert(merge_version.previous is not None)
-        primary_version_id = merge_version.previous
+        # primary_version_id = merge_version.previous
 
         tributary_version = self._get_version(tributary_version_id)
         if self._is_open(tributary_version):
             raise YBDBException('Cannot merge a version with uncommitted changes')
 
-        primary_revision_state = self._revision_state(primary_version_id)
-        tributary_revision_state = self._revision_state(tributary_version_id)
-        merge_revision_state = self._revision_state(merge_version_id)
+        # primary_revision_state = self._revision_state(primary_version_id)
+        # tributary_revision_state = self._revision_state(tributary_version_id)
+        # merge_revision_state = self._revision_state(merge_version_id)
 
-        revision_changes = {}
-        for revision_id, current_selection in merge_revision_state.items():
-            if    (revision_id not in primary_revision_state and revision_id not in tributary_revision_state) \
-               or revision_id in primary_revision_state and current_selection != primary_revision_state[revision_id] \
-               or revision_id in tributary_revision_state and current_selection != tributary_revision_state[revision_id]:
-                revision_changes[revision_id] = current_selection
+        # revision_changes = {}
+        # for revision_id, current_selection in merge_revision_state.items():
+        #     if    (revision_id not in primary_revision_state and revision_id not in tributary_revision_state) \
+        #        or revision_id in primary_revision_state and current_selection != primary_revision_state[revision_id] \
+        #        or revision_id in tributary_revision_state and current_selection != tributary_revision_state[revision_id]:
+        #         revision_changes[revision_id] = current_selection
 
         merge_version.merge = {}
         merge_info = merge_version.merge
         merge_info.tributary = tributary_version_id
         merge_info.default = default_instructions
         merge_info.records = record_instructions
-        if revision_changes != {}:
-            merge_info.revision_changes = revision_changes
+        # if revision_changes != {}:
+        #     merge_info.revision_changes = revision_changes
         
-        previous_revisions_using = self._get_version(merge_version.previous).revisions_using
-        previous_revisions_using_copy = previous_revisions_using.copy()
-        merge_version.revisions_using = []
-        for revision_id in previous_revisions_using_copy:
-            revision = self._get_version(revision_id)
-            if ids.id_type(revision.revision.current) == ids.IDType.branch:
-                previous_revisions_using.remove(revision_id)
-                merge_version.revisions_using.append(revision_id)
-            else:
-                continue
-        if merge_version.revisions_using == []:
-            del merge_version.revisions_using
+        # previous_revisions_using = self._get_version(merge_version.previous).revisions_using
+        # previous_revisions_using_copy = previous_revisions_using.copy()
+        # merge_version.revisions_using = []
+        # for revision_id in previous_revisions_using_copy:
+        #     revision = self._get_version(revision_id)
+        #     if ids.id_type(revision.revision.current) == ids.IDType.branch:
+        #         previous_revisions_using.remove(revision_id)
+        #         merge_version.revisions_using.append(revision_id)
+        #     else:
+        #         continue
+        # if merge_version.revisions_using == []:
+        #     del merge_version.revisions_using
 
-        merge_version.timestamp = self._timestamp()
+        # merge_version.timestamp = self._timestamp()
 
-        if tributary_version.merged_to is None:
-            tributary_version.merged_to = []
-        tributary_version.merged_to.append(merge_version_id)
+        # if tributary_version.merged_to is None:
+        #     tributary_version.merged_to = []
+        # tributary_version.merged_to.append(merge_version_id)
 
-        new_version_id, new_version = self._make_new_version()
-        merge_version.next = new_version_id
-        new_version.previous = merge_version_id
-        new_version.branch = primary_branch_id
-        primary_branch.end = new_version_id
+        # new_version_id, new_version = self._make_new_version()
+        # merge_version.next = new_version_id
+        # new_version.previous = merge_version_id
+        # new_version.branch = primary_branch_id
+        # primary_branch.end = new_version_id
 
         self.save()
         return merge_version_id
+
+    def edit_merge(self, id: ids.ID, default_instructions: dict, record_instructions: dict) -> None:
+        if ids.id_type(id) == ids.IDType.branch:
+            version = self._get_version(self._to_version_id(id))
+        else:
+            version = self._get_version(id)
+        if (not self._is_open(version)) or (self._version_type(version) != VersionType.change):
+            raise YBDBException('Invalid version input to edit_merge')
+        
+        version.merge.default = default_instructions
+        version.merge.records = record_instructions
+
+        self.save()
 
     def setup_revision(self, prev_id: VersionID) -> VersionID:
         """Creates a new revision version after a given version.
