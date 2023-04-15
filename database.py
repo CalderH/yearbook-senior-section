@@ -448,13 +448,18 @@ class Database:
         self.save()
         return current_version_id
     
-    def update(self, branch_id: BranchID, deltas: Record) -> None:
+    def update(self, id: ids.ID, deltas: Record) -> None:
         """Incorporates edits to the version at the end of a branch.
         
         This *replaces* the previous deltas with new deltas, rather than adding onto the previous deltas.
         """
 
-        version = self._get_version(self._to_version_id(branch_id))
+        if ids.id_type(id) == ids.IDType.branch:
+            version = self._get_version(self._to_version_id(id))
+        else:
+            version = self._get_version(id)
+            if (not self._is_open(version)) or (self._version_type(version) == VersionType.merge):
+                raise YBDBException('Invalid version input to update')
 
         version_type = self._version_type(version)
         if version_type not in [VersionType.change, None]:
@@ -493,6 +498,8 @@ class Database:
         self.save()
         return new_branch_id
     
+    
+
     def merge(self, primary_branch_id: BranchID, tributary_version_id: VersionID,
                        default_instructions: dict, record_instructions: dict) -> VersionID:
         """Merges a given version into the end of a given branch."""
