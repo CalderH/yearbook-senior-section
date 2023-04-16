@@ -7,6 +7,7 @@ import json_interface
 
 class View(ABC):
     def __init__(self, db: Database):
+        super().__init__()
         self.db: Database = db
     
     @abstractmethod
@@ -78,7 +79,7 @@ class ContainerView(View):
 class ClosedView(AtomicView):
     def __init__(self, db: Database, version_id: database.VersionID):
         if db._is_open(version_id):
-            raise YBDBException('Cannot input an open version id to a ClosedVersionView')
+            raise YBDBException('Cannot input an open version id to a ClosedView')
         super().__init__(db, version_id)
     
     def sync_from_db(self) -> None:
@@ -89,32 +90,59 @@ class ClosedView(AtomicView):
 class OpenView(AtomicView):
     def __init__(self, db: Database, version_id: Database.VersionID):
         if not db._is_open(version_id):
-            raise YBDBException('Cannot input a closed version id to an OpenVersionView')
+            raise YBDBException('Cannot input a closed version id to an OpenView')
+        super().__init__(db, version_id)
+    
+    # def sync_from_db(self) -> None:
+    #     super().sync_from_db()
+        # revisions = self.db._revision_state(self.version_id).keys()
+        # self.affecting_versions = {self.version_id} | revisions
+    
+    def sync_to_db(self) -> None:
+        self._sync_to_db()
+        self.db.sync_from_view(self)
+
+    @abstractmethod
+    def _sync_to_db(self) -> None:
+        ...
+
+
+class MergeView(AtomicView):
+    def __init__(self, db: Database, version_id: Database.VersionID):
+        if db._version_type(db._get_version(version_id)) != database.VersionType.merge:
+            raise YBDBException('Cannot input a non-merge version id to a MergeView')
         super().__init__(db, version_id)
     
     def sync_from_db(self) -> None:
         super().sync_from_db()
-        revisions = self.db._revision_state(self.version_id).keys()
-        # self.affecting_versions = {self.version_id} | revisions
-    
-    def sync_to_db(self) -> None:
-        ...
+        version = self.db._get_version(self.version_id)
+        self.primary = version.previous
+        self.tributary = version.merge.tributary
+        self.default_rules = version.merge.default
+        self.record_rules = version.merge.records
+
+
+class ClosedChangeView(ClosedView):
+    pass
+
+
+class ClosedMergeView(ClosedView, MergeView):
+    def sync_from_db(self):
+        super().sync_from_db()
+        self.default_rules.make_static()
+        self.record_rules.make_static()
 
 
 class OpenChangeView(OpenView):
-    def __init__(self, db: Database, version_id: Database.VersionID):
-        super().__init__(db, version_id)
-
     def sync_from_db(self) -> None:
         super().sync_from_db()
         previous_version_id = self.db._get_version(self.version_id).previous
         current_revision_state = self.db._revision_state(self.version_id)
         self._previous_state = self.db.compute_state(previous_version_id, revision_state=current_revision_state)
 
-    def sync_to_db(self) -> None:
-        delta = json_interface.calculate_delta(self._previous_state, self._state)
-        self.db.update(self.version_id, delta)
-        self.db.sync_from_view(self)
+    def _sync_to_db(self) -> None:
+        deltas = json_interface.calculate_delta(self._previous_state, self._state)
+        self.db.update(self.version_id, deltas)
     
     def __setitem__(self, key, value):
         self._state[key] = value
@@ -123,12 +151,13 @@ class OpenChangeView(OpenView):
         del self._state[key]
 
 
-class OpenMergeView(OpenView):
-    def __init__(self, db: Database, version_id: Database.VersionID):
-        super().__init__(db, version_id)
+class OpenMergeView(OpenView, MergeView):
+    def _sync_to_db(self) -> None:
+        self.db.edit_merge(self.version_id, self.default_rules, self.record_rules)
+
+
+class VersionView(ContainerView):
+    def __init__(self, db: Database, version_id: database.VersionID, file: Optional[str] = None):
+        super().__init__(db, file)
     
-    def sync_from_db(self) -> None:
-        super().sync_from_db()
-        ...
-    
-    # def set
+    # def av

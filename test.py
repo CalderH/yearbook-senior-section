@@ -5,20 +5,24 @@ from json_interface import *
 from abc import ABC, abstractmethod
 
 class A(ABC):
-    def __init__(self, x):
-        self.x = x
+    def __init__(self):
+        super().__init__()
+        self.a = 1
     
-    def print_x(self):
-        print(self.x)
+class B(ABC):
+    def __init__(self):
+        super().__init__()
+        self.b = 2
 
-class B(A, JSONDict):
-    def __init__(self, x):
-        
-        JSONDict.__init__(self, 'a', {'x': 1}, {})
-        A.__init__(self, x)
-        print(super(JSONDict, self).__dict__)
+class C(A, B):
+    def test(self):
+        print(self.a, self.b)
+    # def __init__(self):
+    #     super().__init__()
+    #     print('c')
 
-a = B(5)
+c = C()
+c.test()
 # a['hi'] = 1
 # a.print()
 

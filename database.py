@@ -171,13 +171,8 @@ class Database:
 
         self.save()
     
-    # def sync_from_view(self, view: view.EditableVersionView) -> None:
-    #     changed_version = view.version_id
-    #     for other_view in self.view_objects:
-    #         if other_view is view:
-    #             continue
-    #         if changed_version in other_view.affecting_versions:
-    #             other_view.sync_from_db()
+    def sync_from_view(self, view: view.EditableVersionView) -> None:
+        ...
     
     def _next_record_id(self) -> RecordID:
         """Get a new unique record ID and increment the record ID counter"""
@@ -265,7 +260,6 @@ class Database:
 
     @staticmethod
     def _is_open(version: Version) -> bool:
-
         return version.next is None
     
     def check_well_formed(self):
@@ -510,7 +504,7 @@ class Database:
         return new_branch_id
 
     def start_merge(self, primary_branch_id: BranchID, tributary_version_id: VersionID,
-                       default_instructions: dict, record_instructions: dict) -> VersionID:
+                       default_rules: dict, record_rules: dict) -> VersionID:
         """Merges a given version into the end of a given branch."""
         
         primary_branch = self._get_branch(primary_branch_id)
@@ -522,60 +516,21 @@ class Database:
             raise YBDBException('Cannot merge to a branch with uncommitted changes')
         
         assert(merge_version.previous is not None)
-        # primary_version_id = merge_version.previous
 
         tributary_version = self._get_version(tributary_version_id)
         if self._is_open(tributary_version):
             raise YBDBException('Cannot merge a version with uncommitted changes')
 
-        # primary_revision_state = self._revision_state(primary_version_id)
-        # tributary_revision_state = self._revision_state(tributary_version_id)
-        # merge_revision_state = self._revision_state(merge_version_id)
-
-        # revision_changes = {}
-        # for revision_id, current_selection in merge_revision_state.items():
-        #     if    (revision_id not in primary_revision_state and revision_id not in tributary_revision_state) \
-        #        or revision_id in primary_revision_state and current_selection != primary_revision_state[revision_id] \
-        #        or revision_id in tributary_revision_state and current_selection != tributary_revision_state[revision_id]:
-        #         revision_changes[revision_id] = current_selection
-
         merge_version.merge = {}
         merge_info = merge_version.merge
         merge_info.tributary = tributary_version_id
-        merge_info.default = default_instructions
-        merge_info.records = record_instructions
-        # if revision_changes != {}:
-        #     merge_info.revision_changes = revision_changes
-        
-        # previous_revisions_using = self._get_version(merge_version.previous).revisions_using
-        # previous_revisions_using_copy = previous_revisions_using.copy()
-        # merge_version.revisions_using = []
-        # for revision_id in previous_revisions_using_copy:
-        #     revision = self._get_version(revision_id)
-        #     if ids.id_type(revision.revision.current) == ids.IDType.branch:
-        #         previous_revisions_using.remove(revision_id)
-        #         merge_version.revisions_using.append(revision_id)
-        #     else:
-        #         continue
-        # if merge_version.revisions_using == []:
-        #     del merge_version.revisions_using
-
-        # merge_version.timestamp = self._timestamp()
-
-        # if tributary_version.merged_to is None:
-        #     tributary_version.merged_to = []
-        # tributary_version.merged_to.append(merge_version_id)
-
-        # new_version_id, new_version = self._make_new_version()
-        # merge_version.next = new_version_id
-        # new_version.previous = merge_version_id
-        # new_version.branch = primary_branch_id
-        # primary_branch.end = new_version_id
+        merge_info.default = default_rules
+        merge_info.records = record_rules
 
         self.save()
         return merge_version_id
 
-    def edit_merge(self, id: ids.ID, default_instructions: dict, record_instructions: dict) -> None:
+    def edit_merge(self, id: ids.ID, default_rules: dict | JSONDict, record_rules: dict | JSONDict) -> None:
         if ids.id_type(id) == ids.IDType.branch:
             version = self._get_version(self._to_version_id(id))
         else:
@@ -583,8 +538,8 @@ class Database:
         if (not self._is_open(version)) or (self._version_type(version) != VersionType.change):
             raise YBDBException('Invalid version input to edit_merge')
         
-        version.merge.default = default_instructions
-        version.merge.records = record_instructions
+        version.merge.default = default_rules
+        version.merge.records = record_rules
 
         self.save()
 
@@ -659,7 +614,7 @@ class Database:
         revision_version.revision.current = new_id
 
     @staticmethod
-    def _compute_merge(primary: DBState, tributary: DBState, lca: DBState, rules: JSONDict) -> DBState:       
+    def _compute_merge(primary: DBState, tributary: DBState, lca: DBState, rules: JSONDict) -> DBState:
         # Giving these strings names so it's easier to know what I'm writing
         class MergeRule(StrEnum):
             inherit = ''
@@ -695,7 +650,7 @@ class Database:
                 else:
                     return MC.primary
             else:
-                raise YBDBException('get_choice must take an explicit rule, not an inherited rule')
+                raise YBDBException('apply_rule must take an explicit rule, not an inherited rule')
 
         # Create the output db state
         output = primary.new()
