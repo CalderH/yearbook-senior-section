@@ -3,6 +3,7 @@ from typing import Optional, Set
 import database
 from database import Database, YBDBException
 import json_interface
+import ids
 
 
 class View(ABC):
@@ -68,12 +69,16 @@ class ContainerView(View):
         self.file = file
         self.has_file = self.file is not None
     
+    def sync_from_db(self) -> None:
+        super().sync_from_db()
+        self.av = self._get_av()
+    
     @abstractmethod
-    def av(self) -> AtomicView:
+    def _get_av(self) -> AtomicView:
         ...
     
     def __getitem__(self, name):
-        return self.av()[name]
+        return self.av[name]
 
 
 class ClosedView(AtomicView):
@@ -87,17 +92,7 @@ class ClosedView(AtomicView):
         self._state.make_static()
 
 
-class OpenView(AtomicView):
-    def __init__(self, db: Database, version_id: Database.VersionID):
-        if not db._is_open(version_id):
-            raise YBDBException('Cannot input a closed version id to an OpenView')
-        super().__init__(db, version_id)
-    
-    # def sync_from_db(self) -> None:
-    #     super().sync_from_db()
-        # revisions = self.db._revision_state(self.version_id).keys()
-        # self.affecting_versions = {self.version_id} | revisions
-    
+class EditableView(AtomicView):
     def sync_to_db(self) -> None:
         self._sync_to_db()
         self.db.sync_from_view(self)
@@ -105,6 +100,13 @@ class OpenView(AtomicView):
     @abstractmethod
     def _sync_to_db(self) -> None:
         ...
+
+
+class OpenView(EditableView):
+    def __init__(self, db: Database, version_id: Database.VersionID):
+        if not db._is_open(version_id):
+            raise YBDBException('Cannot input a closed version id to an OpenView')
+        super().__init__(db, version_id)
 
 
 class MergeView(AtomicView):
@@ -154,10 +156,56 @@ class OpenChangeView(OpenView):
 class OpenMergeView(OpenView, MergeView):
     def _sync_to_db(self) -> None:
         self.db.edit_merge(self.version_id, self.default_rules, self.record_rules)
+    
+    def sync_from_db(self) -> None:
+        super().sync_from_db()
+        self.default_rules._callback = self.sync_from_db
+        self.record_rules._callback = self.sync_from_db
+
+
+class RevisionView(EditableView):
+    def __init__(self, db: Database, version_id: Database.VersionID):
+        version = db._get_version(version_id)
+        if db._version_type(version) != database.VersionType.revision:
+            raise YBDBException('Cannot input a non-revision version id to a RevisionView')
+        self.original = version.revision.original
+        super().__init__(db, version_id)
+    
+    def sync_from_db(self) -> None:
+        super().sync_from_db()
+        self.current = self.db._get_version(self.version_id).current
+    
+    def _sync_to_db(self) -> None:
+        self.db.revise(self.version_id, self.current)
+    
+    def revise(self, new_id: ids.ID):
+        self.current = new_id
 
 
 class VersionView(ContainerView):
     def __init__(self, db: Database, version_id: database.VersionID, file: Optional[str] = None):
         super().__init__(db, file)
+        self.version_id = version_id
     
-    # def av
+    def _get_av(self) -> AtomicView:
+        version = self.db._get_version(self.version_id)
+        is_open = self.db._is_open(version)
+        version_type = self.db._version_type(version)
+        if version_type == database.VersionType.change:
+            if is_open:
+                return OpenChangeView(self.db, self.version_id)
+            else:
+                return ClosedChangeView(self.db, self.version_id)
+        elif version_type == database.VersionType.merge:
+            if is_open:
+                return OpenMergeView(self.db, self.version_id)
+            else:
+                return ClosedMergeView(self.db, self.version_id)
+        elif version_type == database.VersionType.revision:
+            return RevisionView(self.db, self.version_id)
+
+
+class BranchView(ContainerView):
+    ...
+
+    
