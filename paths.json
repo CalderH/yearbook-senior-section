@@ -3,6 +3,7 @@
     "branch template": "templates/branch_template.json",
     "view template": "templates/view_template.json",
     "id info template": "templates/id_info_template.json",
+    "interface template": "templates/interface_template.json",
     "id info": "id_info.json",
     "versions": "versions",
     "branches": "branches",
