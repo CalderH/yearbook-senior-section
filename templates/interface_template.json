@@ -8,10 +8,11 @@
                 "": null
             },
             "done?": "",
-            "error": "",
             "output": "",
-            "state": "",
-            "redo": ""
+            "error": "",
+            "redo?": "",
+            "copy?": "",
+            "prompt id": ""
         }
     ]
 ]

@@ -31,6 +31,7 @@ def _is_list(template: RawValue) -> bool:
     return isinstance(template, list) and len(template) <= 1
 
 
+type_names = {int: 'number', float: 'number', bool: 'boolean', str: 'string', list: 'list', dict: 'dict', type(None): 'none'}
 def _type_name(value, template=False, collapse_choice=False) -> str:
     """Returns the name of the type of a given value.
     
@@ -39,8 +40,6 @@ def _type_name(value, template=False, collapse_choice=False) -> str:
     For a template (template is True), lists with more than one element are interpreted as 'choice's of multiple options
     And if collapse_choice is True, choices where all elements have the same type are interpreted as that type
     """
-
-    type_names = {int: 'number', float: 'number', bool: 'boolean', str: 'string', list: 'list', dict: 'dict', type(None): 'none'}
     if template and type(value) == list:
         if len(value) <= 1:
             return 'list'
@@ -140,7 +139,7 @@ class JSONDict(JSONValue):
         # If _any_keys is true, this represents a dict that holds data for arbitrary keys,
         # rather than specified attributes
         self._any_keys: bool = template is not None and template.keys() == {''}
-        self._data: dict = deepcopy(data)
+        self._data: dict = data
         self._callback = callback
         self._static = static
 
@@ -392,7 +391,7 @@ class JSONList(JSONValue):
     def __init__(self, type_name: str, item_template: RawValue, data: list, callback: Optional[Callable] = None, static: bool = False):
         self._type_name: str = type_name
         self._item_template: RawValue = item_template
-        self._data: list = deepcopy(data)
+        self._data: list = data
         self._item_type_name: str = f'(item of {self._type_name})'
         self._callback = callback
         self._static = static
@@ -501,6 +500,15 @@ class JSONList(JSONValue):
         
         if value in self._data:
             self._data.remove(value)
+    
+    def insert(self, index: int, value: Value) -> None:
+        self._check_static()
+        if isinstance(value, JSONDict) or isinstance(value, JSONList):
+            value = value._data
+
+        self._type_check_item(value)
+        self._data.insert(index, value)
+        self._do_callback()
 
     def set_data(self, new_data: list) -> None:
         """Sets the data of this object to new data"""
