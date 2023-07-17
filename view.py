@@ -10,14 +10,14 @@ class View(ABC):
     def __init__(self, db: Database):
         super().__init__()
         self.db: Database = db
-    
+
     @abstractmethod
     def __getitem__(self, name) -> database.Record:
         ...
 
 
 class AtomicView(View):
-    def __init__(self, db: Database, version_id: Database.VersionID):
+    def __init__(self, db: Database, version_id: database.VersionID):
         super().__init__(db)
         if version_id not in self.db._versions:
             raise YBDBException(f'There is no version with id {version_id}')
@@ -103,14 +103,14 @@ class EditableView(AtomicView):
 
 
 class OpenView(EditableView):
-    def __init__(self, db: Database, version_id: Database.VersionID):
+    def __init__(self, db: Database, version_id: database.VersionID):
         if not db._is_open(version_id):
             raise YBDBException('Cannot input a closed version id to an OpenView')
         super().__init__(db, version_id)
 
 
 class MergeView(AtomicView):
-    def __init__(self, db: Database, version_id: Database.VersionID):
+    def __init__(self, db: Database, version_id: database.VersionID):
         if db._version_type(db._get_version(version_id)) != database.VersionType.merge:
             raise YBDBException('Cannot input a non-merge version id to a MergeView')
         super().__init__(db, version_id)
@@ -164,7 +164,7 @@ class OpenMergeView(OpenView, MergeView):
 
 
 class RevisionView(EditableView):
-    def __init__(self, db: Database, version_id: Database.VersionID):
+    def __init__(self, db: Database, version_id: database.VersionID):
         version = db._get_version(version_id)
         if db._version_type(version) != database.VersionType.revision:
             raise YBDBException('Cannot input a non-revision version id to a RevisionView')

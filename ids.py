@@ -18,7 +18,7 @@ letter_to_id = {letter: id for id, letter in id_to_letter.items()}
 
 separator = ','
 
-id_regex = '^([' + ''.join(id_to_letter.values()) + ']?)' + separator + '([' + vowels + ']|\d+|)([' + initial_consonants + '][' + vowels + '](?:[' + consonants + '][' + vowels + '])*[' + consonants + ']?)$'
+id_regex = '^(?:([' + ''.join(id_to_letter.values()) + ']?)' + separator + ')?([' + vowels + ']|\d+|)([' + initial_consonants + '][' + vowels + '](?:[' + consonants + '][' + vowels + '])*[' + consonants + ']?)$'
 
 start_sequence = 'ba'
 
@@ -60,6 +60,16 @@ def compose_id(id_type: IDType, user: str, sequence: str):
         type_str = id_to_letter[id_type]
     return type_str + separator + user + sequence
 
+def input_id(id):
+    id = id.strip()
+    if not re.fullmatch(id_regex, id):
+        return None
+    else:
+        if separator not in id:
+            return separator + id
+        else:
+            return id
+
 root_version_id = compose_id(IDType.version, '', 'ROOT')
 trunk_branch_id = compose_id(IDType.branch, '', 'TRUNK')
     
@@ -82,6 +92,7 @@ def decompose_id(id: str) -> Tuple[IDType, str, str]:
         raise Exception(f'{id} is not a valid id')
     else:
         id_type, user, sequence = match[0]
+
         if id_type == '':
             id_type = None
         else:

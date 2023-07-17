@@ -46,14 +46,14 @@ if os.path.exists('folders.json'):
         
         return os.path.join(*path_items)
 
-    def core_path(key: str) -> str:
-        return construct_path(PS.core, (PS.core, key))
+    def core_path(key: str, *args) -> str:
+        return construct_path(PS.core, (PS.core, key), *args)
     
-    def school_path(key: str) -> str:
-        return construct_path(PS.school, (PS.school, key))
+    def school_path(key: str, *args) -> str:
+        return construct_path(PS.school, (PS.school, key), *args)
     
-    def year_path(key: str) -> str:
-        return construct_path(PS.year, (PS.year, key))
+    def year_path(key: str, *args) -> str:
+        return construct_path(PS.year, (PS.year, key), *args)
 else:
     with open('paths.json') as file:
         core_paths = json.load(file)

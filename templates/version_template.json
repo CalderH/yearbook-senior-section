@@ -16,14 +16,14 @@
     "merge": {
         "tributary": "",
         "default": {
-            "all": ["", "p", "t", "p!", "t!", "a", "f"],
-            "inherit priority": ["a", "f"],
-            "fields": {"": ["", "p", "t", "p!", "t!", "a", "f"]}
+            "all": ["p", "t", "p!", "t!"],
+            "inherit priority": ["f", "r"],
+            "fields": {"": ["", "p", "t", "p!", "t!", "f", "r"]}
         },
         "records": {
             "": {
-                "all": ["", "p", "t", "p!", "t!", "a", "f"],
-                "fields": {"": ["", "p", "t", "p!", "t!", "a", "f"]}
+                "all": ["", "p", "t", "p!", "t!", "f", "r"],
+                "fields": {"": ["", "p", "t", "p!", "t!", "f", "r"]}
             }
         },
         "revision changes": {"": ""}

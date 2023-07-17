@@ -1,6 +1,8 @@
 Database = None
 VersionID = None
 BranchID = None
+YBDBException = None
+Record = None
 
 import json
 from json_interface import *
@@ -126,7 +128,7 @@ class Database:
                     json.dump(value._template_order(), file, indent=4)
         
         with open(self._database_path('id info'), 'w') as file:
-            json.dump(self._id_info._template_order(), file, indent=4)
+            json.dump(self._id_info.as_dict(), file, indent=4)
         save_attr_to_dir('versions', self._version_template, self._versions)
         save_attr_to_dir('branches', self._branch_template, self._branches)
         save_attr_to_dir('views', self._view_template, self._views)
@@ -171,8 +173,9 @@ class Database:
 
         self.save()
     
-    def sync_from_view(self, view: view.EditableVersionView) -> None:
+    def sync_from_view(self, view: view.EditableView) -> None:
         ...
+        # TODO
     
     def _next_record_id(self) -> RecordID:
         """Get a new unique record ID and increment the record ID counter"""
@@ -305,21 +308,24 @@ class Database:
                     if include_revisions and edge_version_id not in ancestors:
                         ancestors.append(edge_version_id)
 
-                    if revision_state is not None:
-                        selection = revision_state[edge_version]
-                    elif open_version:
-                        selection = self._to_version_id(edge_version.revision.current, allow_open=False)
-                    elif edge_version_id in revisions:
-                        selection = revisions[edge_version_id]
-                    else:
-                        selection = edge_version.revision.original
-                    
+                    selection = edge_version
+                    while self._version_type(selection) == VersionType.revision:
+                        if revision_state is not None:
+                            selection_id = revision_state[edge_version]
+                        elif open_version:
+                            selection_id = self._to_version_id(edge_version.revision.current, allow_open=False)
+                        elif edge_version_id in revisions:
+                            selection_id = revisions[edge_version_id]
+                        else:
+                            selection_id = edge_version.revision.original
+                        selection = self._get_version(selection_id)
+                        
                     if edge_version_id not in revisions:
-                        revisions[edge_version_id] = selection
+                        revisions[edge_version_id] = selection_id
 
-                    new_edge.append(selection)
+                    new_edge.append(selection_id)
                     if include_revisions:
-                        graph[edge_version_id] = [selection]
+                        graph[edge_version_id] = [selection_id]
                 else:
                     if edge_version_id not in ancestors:
                         ancestors.append(edge_version_id)
@@ -383,7 +389,7 @@ class Database:
         
         raise YBDBException(f'Unable to find LCA of {v1_id} and {v2_id}')
 
-    def commit(self, branch_id: BranchID) -> VersionID:
+    def commit(self, branch_id: BranchID, message: Optional[str] = None) -> VersionID:
         """Commit the changes that have been made to a branch.
         
         This creates a new blank version at the end of the branch, so the previous end version cannot be edited anymore.
@@ -443,7 +449,9 @@ class Database:
         if current_version.revisions_using == []:
             del current_version.revisions_using
                 
-        current_version.timestamp = self._timestamp()    
+        current_version.timestamp = self._timestamp()
+        if message is not None:
+            current_version.message = message
         new_version_id, new_version = self._make_new_version()
         new_version.branch = branch_id
         current_version.next = new_version_id
@@ -569,26 +577,27 @@ class Database:
             for branch_id in revision_version.branches_out:
                 branch_start_version = self._get_version(self._get_branch(branch_id).start)
                 branch_start_version.prev = revision_id
+            del prev_version.branches_out
         
         if prev_version.merged_to is not None:
             revision_version.merged_to = prev_version.merged_to
             for merge_version_id in revision_version.merged_to:
                 merge_version = self._get_version(merge_version_id)
                 merge_version.merge.tributary = revision_id
+            del prev_version.merged_to
         
+        # TODO decide if this is the right design decision
+        # this means that a revision can point to another revision. does that even work?
         if prev_version.revisions_using is not None:
             revision_version.revisions_using = prev_version.revisions_using
             for other_revision_id in revision_version.revisions_using:
                 other_revision = self._get_version(other_revision_id)
                 other_revision.current = revision_id
+            prev_version.revisions_using = [revision_id]
 
         revision_version.revision = {}
         revision_version.revision.current = prev_id
         revision_version.revision.original = prev_id
-
-        if prev_version.revisions_using is None:
-            prev_version.revisions_using = []
-        prev_version.revisions_using.append(revision_id)
 
         self.save()
         return revision_id
@@ -602,6 +611,12 @@ class Database:
         revision_version = self._get_version(revision_id)
         if self._version_type(revision_version) != VersionType.revision:
             raise YBDBException('Cannot revise a non-revision version')
+        
+        selection_id = new_version_id
+        while self._version_type(selection := self._get_version(selection_id)) == VersionType.revision:
+            if selection_id == revision_id:
+                raise YBDBException('Cannot make revisions select each other in a loop')
+            selection_id = selection.revision.current
         
         old_current = self._get_version(revision_version.revision.current)
         new_current = self._get_version(new_version_id)
@@ -660,6 +675,9 @@ class Database:
         field_rules = rules.default.fields
         inherit_priority = rules.default.inherit_priority
         record_rules = rules.records
+
+        if default_rule is None:
+            default_rule = MR.primary_if_conflict
 
         # Figure out what fields have been edited
         primary_deltas = calculate_delta(lca, primary)
