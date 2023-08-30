@@ -1,7 +1,8 @@
 import json
 from copy import deepcopy
 from typing import Union, Optional, Any, cast, Callable, Dict
-import os
+import utilities
+import re
 
 
 RawValue = Union[None, int, float, bool, str, list, dict]
@@ -77,7 +78,7 @@ def _type_check(name: str, data: RawValue, template: RawValue) -> None:
     # Everything matches null data
     if template is None or data is None:
         return
-
+    
     data_type_name = _type_name(data)
     template_type_name = _type_name(template, template=True)
 
@@ -141,9 +142,20 @@ class JSONValue:
     pass
 
 
+def as_raw(data):
+    if isinstance(data, JSONValue):
+        return data.as_raw()
+    elif isinstance(data, dict):
+        return {key: as_raw(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [as_raw(item) for item in data]
+    else:
+        return data
+
+
 class JSONDict(JSONValue):
     # Need this to prevent getattr from recurring infinitely
-    reserved_names = ['_type_name', '_template', '_any_keys', '_data', '_callback', '_static']
+    reserved_names = ['_type_name', '_template', '_template_value', '_any_keys', '_data', '_callback', '_static']
 
     def __init__(self, type_name: str, template: Optional[dict], data: dict, callback: Optional[Callable] = None, static: bool = False):
         self._type_name: str = type_name
@@ -156,16 +168,27 @@ class JSONDict(JSONValue):
                     self._template = possibility
                     found = True
                     break
-                except TypeError:
+                except:
                     continue
             if not found:
                 raise TypeError(f'None of the type options for {type_name} matches the data')
         else:
-            self._template: Optional[dict] = template
+            if template == {}:
+                self._template = None
+            else:
+                self._template: Optional[dict] = template
 
         # If _any_keys is true, this represents a dict that holds data for arbitrary keys,
         # rather than specified attributes
-        self._any_keys: bool = self._template is not None and self._template.keys() == {''}
+
+        if self._template is not None:
+            keys = list(self._template.keys())
+            self._any_keys = len(keys) == 1 and keys[0] == '' or re.fullmatch(r'\[.*\]', keys[0])
+            if self._any_keys:
+                self._template_value = self._template[keys[0]]
+        else:
+            self._any_keys = False
+
         self._data: dict = data
         self._callback = callback
         self._static = static
@@ -205,7 +228,7 @@ class JSONDict(JSONValue):
         template_value = None
         # If the dict stores the same template of data for arbitrary keys, then get that template
         if self._any_keys:
-            template_value = self._template['']
+            template_value = self._template_value
 
         # Check each name/value pair
         for name, data_value in self._data.items():
@@ -274,6 +297,10 @@ class JSONDict(JSONValue):
 
             self[name] = value
     
+    # TODO this shouldn’t be necessary if I end up switching to a metaclass-based solution
+    def __actual_setattr__(self, name: str, value: Value) -> None:
+        super().__setattr__(name, value)
+    
     def __delattr__(self, name: str) -> None:
         if name in JSONDict.reserved_names:
             super().__delattr__(name)
@@ -296,7 +323,7 @@ class JSONDict(JSONValue):
             if self._template is None:
                 template_value = None
             elif self._any_keys:
-                template_value = self._template['']
+                template_value = self._template_value
             else:
                 template_value = self._template[name]
             
@@ -324,16 +351,14 @@ class JSONDict(JSONValue):
     
     def __setitem__(self, name: str, value: Value) -> None:
         self._check_static()
-
-        if isinstance(value, JSONDict) or isinstance(value, JSONList):
-            value = value._data
-        
+        self._check_name(name)
+        value = as_raw(value)
+ 
         # Only need to type check if the template is not none
         if self._template is not None:
-            self._check_name(name)
             type_name = self._element_type_name(name)
             if self._any_keys:
-                template_value = self._template['']
+                template_value = self._template_value
             else:
                 template_value = self._template[name]
             _type_check(type_name, value, template_value)
@@ -378,10 +403,10 @@ class JSONDict(JSONValue):
         else:
             return False
 
-    def as_raw(self) -> dict:
+    def as_raw(self) -> dict:      
         output = {}
         
-        if self._any_keys:
+        if self._any_keys or self._template is None:
             keys = sorted(list(self._data.keys()))
         elif isinstance(self._template, dict):
             keys = list(self._template.keys())
@@ -392,9 +417,7 @@ class JSONDict(JSONValue):
             value = self[key]
             if value is None:
                 continue
-            if isinstance(value, JSONDict) or isinstance(value, JSONList):
-                value = value.as_raw()
-            output[key] = value
+            output[key] = as_raw(value)
 
         return output
         
@@ -517,8 +540,7 @@ class JSONList(JSONValue):
 
     def __setitem__(self, index: int, value: Value) -> None:
         self._check_static()
-        if isinstance(value, JSONDict) or isinstance(value, JSONList):
-            value = value._data
+        value = as_raw(value)
         self._type_check_item(value)
         self._data[index] = value
         self._do_callback()
@@ -530,8 +552,7 @@ class JSONList(JSONValue):
     
     def append(self, value: Value) -> None:
         self._check_static()
-        if isinstance(value, JSONDict) or isinstance(value, JSONList):
-            value = value._data
+        value = as_raw(value)
 
         self._type_check_item(value)
         self._data.append(value)
@@ -539,16 +560,14 @@ class JSONList(JSONValue):
 
     def remove(self, value: Value) -> None:
         self._check_static()
-        if isinstance(value, JSONDict) or isinstance(value, JSONList):
-            value = value._data
+        value = as_raw(value)
         
         if value in self._data:
             self._data.remove(value)
     
     def insert(self, index: int, value: Value) -> None:
         self._check_static()
-        if isinstance(value, JSONDict) or isinstance(value, JSONList):
-            value = value._data
+        value = as_raw(value)
 
         self._type_check_item(value)
         self._data.insert(index, value)
@@ -564,8 +583,7 @@ class JSONList(JSONValue):
         self._data = new_data
 
     def __contains__(self, item) -> bool:
-        if isinstance(item, JSONDict) or isinstance(item, JSONList):
-            item = item._data
+        item = as_raw(item)
         
         return item in self._data
 
@@ -586,10 +604,7 @@ class JSONList(JSONValue):
         output = []
 
         for item in self:
-            if isinstance(item, JSONDict) or isinstance(item, JSONList):
-                output.append(item.as_raw())
-            else:
-                output.append(item)
+            output.append(as_raw(item))
         
         return output
 
@@ -688,31 +703,53 @@ class JSONFile:
         self.path: str = path
         self.type_name = type_name
         self.template = template
-        if isinstance(template, dict):
+        self.data = None
+        self.load_empty()
+    
+    def load_task(name):
+        return JSONFile(utilities.task_path(name), name, utilities.template(name))
+
+    def load_empty(self):
+        if isinstance(self.template, dict):
             self.data = JSONDict(self.type_name, self.template, {})
         else:
-            self.data = JSONList(self.type_name, self.template, [])
+            if len(self.template) == 0:
+                item_template = None
+            else:
+                item_template = self.template[0]
+            self.data = JSONList(self.type_name, item_template, [])
     
     def load(self):
+        with open(self.path) as file:
+            if file.read().strip() == '':
+                self.load_empty()
+                return
+            
         with open(self.path) as file:
             raw_data = json.load(file)
 
         if isinstance(raw_data, dict):
             self.data = JSONDict(self.type_name, self.template, raw_data)
         elif isinstance(raw_data, list):
-            self.data = JSONList(self.type_name, self.template, raw_data)
+            if len(self.template) == 0:
+                item_template = None
+            else:
+                item_template = self.template[0]
+            self.data = JSONList(self.type_name, item_template, raw_data)
         else:
             raise Exception('JSONFile requires that the top-level element be a list or dict')
     
     def save(self):
         with open(self.path, 'w') as file:
-            json.dump(self.data._data, file, indent=4)
+            json.dump(self.data.as_raw(), file, indent=4, ensure_ascii=False)
     
     def __getattr__(self, name):
         if name in JSONFile.reserved_names:
             return super().__getattribute__(name)
-        else:
+        elif isinstance(self.data, JSONDict):
             return self.data.__getattr__(name)
+        else:
+            return self.data.__getattribute__(name)
     
     def __setattr__(self, name, value):
         if name in JSONFile.reserved_names:
@@ -742,7 +779,7 @@ class JSONFile:
         return len(self.data)
     
     def __iter__(self):
-        return self.data.__iter__()
+        return iter(self.data)
 
     # TODO raise exceptions if it's a list
     def items(self):

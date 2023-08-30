@@ -20,7 +20,7 @@ separator = ','
 
 id_regex = '^(?:([' + ''.join(id_to_letter.values()) + ']?)' + separator + ')?([' + vowels + ']|\d+|)([' + initial_consonants + '][' + vowels + '](?:[' + consonants + '][' + vowels + '])*[' + consonants + ']?)$'
 
-start_sequence = 'ba'
+start_sequence = initial_consonants[0] + vowels[0]
 
 ID = NewType('ID', str)
 
@@ -51,6 +51,14 @@ def next_id(id: str) -> str:
     
     return compose_id(id_type, user, ''.join(new_sequence))
 
+
+def next_id_for_collection(used_ids):
+    id = compose_id(None, '',  start_sequence)
+    while id in used_ids:
+        id = next_id(id)
+    return id
+
+
 def compose_id(id_type: IDType, user: str, sequence: str):
     """Creates an ID out of the parts."""
 
@@ -58,6 +66,7 @@ def compose_id(id_type: IDType, user: str, sequence: str):
         type_str = ''
     else:
         type_str = id_to_letter[id_type]
+    
     return type_str + separator + user + sequence
 
 def input_id(id):
@@ -72,6 +81,11 @@ def input_id(id):
 
 root_version_id = compose_id(IDType.version, '', 'ROOT')
 trunk_branch_id = compose_id(IDType.branch, '', 'TRUNK')
+
+
+def is_id(s):
+    return bool(re.fullmatch(id_regex, s))
+
     
 def decompose_id(id: str) -> Tuple[IDType, str, str]:
     """Separates the type, user, and sequence of an ID.
@@ -99,6 +113,9 @@ def decompose_id(id: str) -> Tuple[IDType, str, str]:
             id_type = letter_to_id[id_type]
         return id_type, user, sequence
 
+def no_sep(id):
+    _, user, sequence = decompose_id(id)
+    return user + sequence
 
 def id_type(id: str) -> Optional[IDType]:
     return decompose_id(id)[0]

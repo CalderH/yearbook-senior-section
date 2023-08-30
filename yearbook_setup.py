@@ -1,7 +1,7 @@
 import json
 import os.path
 from enum import Enum
-from typing import Tuple, List
+from typing import Tuple, Union
 
 
 class PathSource(Enum):
@@ -28,7 +28,7 @@ if os.path.exists('folders.json'):
     with open(os.path.join(_year_path_head, 'paths.json')) as file:
         year_paths = json.load(file)
     
-    def construct_path(*args: List[PathSource | Tuple[PathSource, str] | str]) -> str:
+    def construct_path(*args: Union[PathSource, Tuple[PathSource, str], str]) -> str:
         head_dict = {PS.core: _core_path_head, PS.school: _school_path_head, PS.year: _year_path_head}
         key_dict = {PS.core: core_paths, PS.school: school_paths, PS.year: year_paths}
 

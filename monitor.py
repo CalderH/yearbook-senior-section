@@ -22,6 +22,7 @@ def start_monitor(path, action):
         while True:
             mtime = os.path.getmtime(path)
             if last_mtime is not None and mtime != last_mtime:
+                sleep(0.1)
                 action()
             last_mtime = os.path.getmtime(path)
             sleep(0.1)
@@ -30,13 +31,17 @@ def start_monitor(path, action):
     thread.start()
 
 
-def start_json_monitor(path, type_name, template, json_action):
-    jf = JSONFile(path, type_name, template)
+def start_json_monitor(json_file, json_action):
     def action():
-        jf.load()
-        json_action(jf)
-        jf.save()
-    start_monitor(path, action)
+        json_file.load()
+        json_action(json_file)
+        json_file.save()
+    start_monitor(json_file.path, action)
+
+
+def start_json_monitor_from_parameters(path, type_name, template, json_action):
+    json_file = JSONFile(path, type_name, template)
+    start_json_monitor(json_file, json_action)
 
 # TODO If I’m going to work on this anymore at some point,
 # make it so that I can compare this version with the previously saved version.
